@@ -1,7 +1,8 @@
-import { Play, Pause, ArrowLeftToLine, Tally3 } from 'lucide-react';
+import { Tally3 } from 'lucide-react';
 import { ROOT_NOTES, EXERCISE_TYPES, SUBDIVISIONS } from '../data/exerciseTypes';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Slider } from './ui/Slider';
+import { Switch } from './ui/Switch';
 
 export function Controls({
   rootNote,
@@ -22,12 +23,16 @@ export function Controls({
   onPlayToggle,
   onReset,
   metronomeVolume,
-  onMetronomeVolumeChange
+  onMetronomeVolumeChange,
+  showScroller,
+  onShowScrollerChange,
+  showFretboard,
+  onShowFretboardChange
 }) {
   return (
-    <div className="flex flex-wrap gap-3 justify-center items-center p-3 bg-bg-secondary rounded-lg mb-4">
+    <div className="flex flex-wrap gap-3 justify-center items-center p-3">
       <Select value={rootNote} onValueChange={onRootChange}>
-        <SelectTrigger>
+        <SelectTrigger size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -40,7 +45,7 @@ export function Controls({
       </Select>
 
       <Select value={typeId} onValueChange={onTypeChange}>
-        <SelectTrigger>
+        <SelectTrigger size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -53,7 +58,7 @@ export function Controls({
       </Select>
 
       <Select value={exerciseId} onValueChange={onExerciseChange}>
-        <SelectTrigger>
+        <SelectTrigger size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -67,7 +72,7 @@ export function Controls({
 
       {patterns.length > 1 && (
         <Select value={patternId} onValueChange={onPatternChange}>
-          <SelectTrigger>
+          <SelectTrigger size="sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -81,8 +86,8 @@ export function Controls({
       )}
 
       <Select value={String(subdivision)} onValueChange={(val) => onSubdivisionChange(Number(val))}>
-        <SelectTrigger>
-          {subdivision === 3 ? <Tally3 size={16} /> : <SelectValue />}
+        <SelectTrigger size="sm">
+          {subdivision === 3 ? <Tally3 size={14} /> : <SelectValue />}
         </SelectTrigger>
         <SelectContent>
           {SUBDIVISIONS.map((sub) => (
@@ -105,7 +110,7 @@ export function Controls({
         />
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="hidden flex items-center gap-2">
         <span className="text-xs text-text-secondary">Click</span>
         <Slider
           value={[metronomeVolume]}
@@ -117,19 +122,15 @@ export function Controls({
         />
       </div>
 
-      <div className="flex gap-2">
-        <button
-          onClick={onPlayToggle}
-          className="p-2 bg-accent text-white rounded cursor-pointer transition-all hover:bg-accent-light"
-        >
-          {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-        </button>
-        <button
-          onClick={onReset}
-          className="p-2 bg-bg-tertiary text-text-primary rounded cursor-pointer transition-all hover:bg-[#1a4a7a]"
-        >
-          <ArrowLeftToLine size={18} />
-        </button>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+          <Switch checked={showScroller} onCheckedChange={onShowScrollerChange} />
+          <span>Scroller</span>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+          <Switch checked={showFretboard} onCheckedChange={onShowFretboardChange} />
+          <span>Fretboard</span>
+        </label>
       </div>
     </div>
   );

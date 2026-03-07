@@ -6,11 +6,13 @@ import { cn } from '../../lib/utils';
 const Select = SelectPrimitive.Root;
 const SelectValue = SelectPrimitive.Value;
 
-const SelectTrigger = React.forwardRef(({ className, children, ...props }, ref) => (
+const SelectTrigger = React.forwardRef(({ className, size = 'default', children, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-8 items-center justify-between whitespace-nowrap rounded bg-bg-tertiary border border-gray-700 px-3 py-1.5 text-sm text-text-primary',
+      'flex items-center justify-between whitespace-nowrap rounded-full bg-bg-tertiary border border-gray-700 py-1.5 text-sm text-text-primary',
+      size === 'sm' && 'h-6 px-2.5 text-xs',
+      size === 'default' && 'h-8 px-3',
       'focus:outline-none focus:border-accent',
       'disabled:cursor-not-allowed disabled:opacity-50',
       className
@@ -19,7 +21,7 @@ const SelectTrigger = React.forwardRef(({ className, children, ...props }, ref) 
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50 ml-2" />
+      <ChevronDown className={cn('opacity-50 ml-1.5', size === 'sm' ? 'h-3 w-3' : 'h-4 w-4')} />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));

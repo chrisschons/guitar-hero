@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Play, Pause, ArrowLeftToLine } from 'lucide-react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Controls } from './components/Controls';
 import { TabDisplay, COLUMN_WIDTH, INITIAL_SCROLL } from './components/TabDisplay';
@@ -24,6 +25,8 @@ function App() {
   const [typeId, setTypeId] = useLocalStorage('guitar-hero-type', 'pentatonic');
   const [exerciseId, setExerciseId] = useLocalStorage('guitar-hero-exercise', 'pos1');
   const [patternId, setPatternId] = useLocalStorage('guitar-hero-pattern', 'up-down');
+  const [showScroller, setShowScroller] = useLocalStorage('guitar-hero-show-scroller', true);
+  const [showFretboard, setShowFretboard] = useLocalStorage('guitar-hero-show-fretboard', true);
 
   // Get current type and its exercises/patterns
   const currentType = EXERCISE_TYPES.find(t => t.id === typeId);
@@ -144,20 +147,13 @@ function App() {
   };
 
   const handleBpmChange = (newBpm) => {
-    if (isPlaying) {
-      // Reset everything when BPM changes during playback
-      setScrollPosition(INITIAL_SCROLL);
-      setCurrentBeat(-1);
-      setCurrentTick(-1);
-      setCountIn(0);
-      setCurrentNotes([]);
-    }
     setBpm(newBpm);
   };
 
   const handleSubdivisionChange = (newSub) => {
     handleReset();
     setSubdivision(newSub);
+    setScrollPosition(INITIAL_SCROLL);
   };
 
   useEffect(() => {
@@ -173,19 +169,9 @@ function App() {
   }, []);
 
   return (
-    <div>
-      <TabDisplay 
-        tab={tab} 
-        scrollPosition={scrollPosition}
-        currentBeat={currentBeat}
-        countIn={countIn}
-        activeNoteIndex={currentTick >= 0 ? currentTick % tab.length : -1}
-        subdivision={subdivision}
-      />
-
-      <div className="max-w-[1200px] mx-auto px-5 mt-6">
-        <FretboardDiagram vizData={vizData} currentNotes={currentNotes} rootNote={rootNote} />
-
+    <div className="min-h-screen flex flex-col">
+      {/* Toolbar at top, full width */}
+      <div className="w-full bg-bg-secondary border-b border-bg-tertiary shrink-0">
         <Controls
           rootNote={rootNote}
           onRootChange={handleRootChange}
@@ -206,16 +192,53 @@ function App() {
           onReset={handleReset}
           metronomeVolume={metronomeVolume}
           onMetronomeVolumeChange={setMetronomeVolume}
+          showScroller={showScroller}
+          onShowScrollerChange={setShowScroller}
+          showFretboard={showFretboard}
+          onShowFretboardChange={setShowFretboard}
         />
+      </div>
 
-        <footer className="mt-12 mb-6 text-center">
-          <a 
-            href="#/bravura-demo" 
-            className="text-xs text-accent hover:text-accent-light transition-colors"
-          >
-            Bravura / SMuFL Demo
-          </a>
-        </footer>
+      <div className="flex-1 flex flex-col">
+        {showScroller && (
+          <TabDisplay 
+            tab={tab} 
+            scrollPosition={scrollPosition}
+            currentBeat={currentBeat}
+            countIn={countIn}
+            activeNoteIndex={currentTick >= 0 ? currentTick % tab.length : -1}
+            subdivision={subdivision}
+          />
+        )}
+
+        <div className="max-w-[1200px] mx-auto px-5 mt-6 flex-1 flex flex-col">
+          {showFretboard && <FretboardDiagram vizData={vizData} currentNotes={currentNotes} rootNote={rootNote} />}
+
+          {/* Play and Reset under fretboard - centered pill buttons */}
+          <div className="flex gap-2 mt-4 justify-center">
+            <button
+              onClick={handlePlayToggle}
+              className="flex items-center gap-2 px-5 py-2 rounded-full bg-accent text-white text-sm font-medium cursor-pointer transition-all hover:bg-accent-light"
+            >
+              {isPlaying ? <><Pause size={18} /><span>Pause</span></> : <><Play size={18} /><span>Play</span></>}
+            </button>
+            <button
+              onClick={handleReset}
+              className="flex items-center justify-center p-2 rounded-full bg-bg-tertiary text-text-primary cursor-pointer transition-all hover:bg-[#1a4a7a]"
+            >
+              <ArrowLeftToLine size={18} />
+            </button>
+          </div>
+
+          <footer className="mt-auto pt-12 pb-6 text-center">
+            <a 
+              href="#/bravura-demo" 
+              className="text-xs text-accent hover:text-accent-light transition-colors"
+            >
+              Bravura / SMuFL Demo
+            </a>
+          </footer>
+        </div>
       </div>
     </div>
   );
