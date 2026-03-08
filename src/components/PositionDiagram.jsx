@@ -16,6 +16,9 @@ export function PositionDiagram({ notes, title = '', fullScale = false }) {
   const maxFret = fullScale ? 23 : Math.max(...frets);
   const fretRange = maxFret - minFret + 1;
   const cellWidth = fullScale ? undefined : 28;
+  const showZeroColumn = minFret === 0;
+  // First vertical line: bold when first column is fret 1, else 1px (like chord diagrams)
+  const firstLineBold = minFret === 1;
 
   return (
     <div className={`bg-bg-secondary rounded-lg p-3 border border-bg-tertiary ${fullScale ? 'w-full' : ''}`}>
@@ -32,27 +35,33 @@ export function PositionDiagram({ notes, title = '', fullScale = false }) {
                   className={`text-center text-[10px] text-text-secondary ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
                   style={!fullScale ? { width: cellWidth } : undefined}
                 >
-                  {fret}
+                  {showZeroColumn && fret === 0 ? '' : fret}
                 </div>
               ))}
             </div>
             {[0, 1, 2, 3, 4, 5].map((stringIndex) => (
               <div key={stringIndex} className="flex h-4 relative w-full">
                 <div
-                  className="absolute top-1/2 left-0 right-0 border-t border-gray-600"
-                  style={{ borderWidth: stringIndex > 2 ? '2px' : '1px', opacity: 0.5 }}
+                  className="absolute top-1/2 border-t border-gray-600"
+                  style={{
+                    left: showZeroColumn ? (fullScale ? `${100 / fretRange}%` : cellWidth) : 0,
+                    right: 0,
+                    borderWidth: stringIndex > 2 ? '2px' : '1px',
+                    opacity: 0.5,
+                  }}
                 />
                 {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => {
                   const hasNote = notesSet.has(`${stringIndex}-${fret}`);
                   const isRoot = hasNote && isRootNote(stringIndex, fret);
                   const isFirstCol = fret === minFret;
                   const isNut = minFret === 0 && isFirstCol;
+                  const isFirstLineBold = minFret === 1 && isFirstCol;
                   return (
                     <div
                       key={fret}
                       className={`flex items-center justify-center relative ${
-                        isNut ? 'border-r-[3px] border-gray-500' : 'border-r border-gray-700'
-                      } ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
+                        isNut ? 'border-r-[4px] border-gray-500' : 'border-r border-gray-700'
+                      } ${isFirstLineBold ? 'border-l-[4px] border-gray-500' : isFirstCol && minFret > 1 ? 'border-l border-gray-700' : ''} ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
                       style={!fullScale ? { width: cellWidth } : undefined}
                     >
                       {hasNote && (
