@@ -156,7 +156,42 @@ export const SCALE_INTERVALS = {
   minor: [0, 2, 3, 5, 7, 8, 10],          // Natural minor: 1, 2, b3, 4, 5, b6, b7
 };
 
-// Pentatonic position notes (base in A)
+// String open note semitones from C (e=4, B=11, G=7, D=2, A=9, E=4) - string index 0 high e to 5 low E
+export const STRING_SEMITONES = [4, 11, 7, 2, 9, 4];
+
+// Get position notes for reference page (neutral/key of A). Returns { notes: [[stringIndex, fret], ...] }.
+export function getReferencePosition(scaleTypeId, positionIndex) {
+  let positions;
+  switch (scaleTypeId) {
+    case 'pentatonic': positions = PENTATONIC_POSITIONS; break;
+    case 'blues': positions = BLUES_POSITIONS; break;
+    case 'major-3nps': positions = MAJOR_3NPS_POSITIONS; break;
+    case 'minor-3nps': positions = MINOR_3NPS_POSITIONS; break;
+    default: return { notes: [] };
+  }
+  const notes = positions[positionIndex] ? [...positions[positionIndex]] : [];
+  return { notes };
+}
+
+// Get all scale notes across the fretboard for reference (key of A). Returns { notes }.
+export function getReferenceFullScale(scaleTypeId) {
+  const scaleType = scaleTypeId === 'major-3nps' ? 'major' : scaleTypeId === 'minor-3nps' ? 'minor' : scaleTypeId;
+  const intervals = SCALE_INTERVALS[scaleType];
+  if (!intervals) return { notes: [] };
+  const rootSemitone = 9; // A
+  const notes = [];
+  for (let stringIndex = 0; stringIndex < 6; stringIndex++) {
+    const openNote = STRING_SEMITONES[stringIndex];
+    for (let fret = 0; fret <= 23; fret++) {
+      const noteSemitone = (openNote + fret) % 12;
+      const intervalFromRoot = (noteSemitone - rootSemitone + 12) % 12;
+      if (intervals.includes(intervalFromRoot)) {
+        notes.push([stringIndex, fret]);
+      }
+    }
+  }
+  return { notes };
+}
 // Format: [stringIndex, fret] - strings: 0=e, 1=B, 2=G, 3=D, 4=A, 5=E
 // Verified against actual A minor pentatonic notes: A, C, D, E, G
 const PENTATONIC_POSITIONS = [

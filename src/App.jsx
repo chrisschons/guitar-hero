@@ -170,8 +170,8 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Toolbar at top, full width */}
-      <div className="w-full bg-bg-secondary border-b border-bg-tertiary shrink-0">
+      {/* Toolbar at top, full width, sticky */}
+      <div className="sticky top-0 z-10 w-full bg-bg-secondary border-b border-bg-tertiary shrink-0">
         <Controls
           rootNote={rootNote}
           onRootChange={handleRootChange}
@@ -230,9 +230,15 @@ function App() {
             </button>
           </div>
 
-          <footer className="mt-auto pt-12 pb-6 text-center">
-            <a 
-              href="#/bravura-demo" 
+          <footer className="mt-auto pt-12 pb-6 text-center space-x-4">
+            <a
+              href="#/reference"
+              className="text-xs text-accent hover:text-accent-light transition-colors"
+            >
+              Scale Reference
+            </a>
+            <a
+              href="#/bravura-demo"
               className="text-xs text-accent hover:text-accent-light transition-colors"
             >
               Bravura / SMuFL Demo
