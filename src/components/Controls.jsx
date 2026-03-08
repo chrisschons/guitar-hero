@@ -1,5 +1,6 @@
 import { Tally3 } from 'lucide-react';
-import { ROOT_NOTES, EXERCISE_TYPES, SUBDIVISIONS } from '../data/exerciseTypes';
+import { ROOT_NOTES, EXERCISE_TYPES, SUBDIVISIONS, TIME_SIGNATURES } from '../data/exerciseTypes';
+import { TUNINGS_LIST } from '../data/tunings';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
@@ -15,6 +16,10 @@ export function Controls({
   patternId,
   patterns,
   onPatternChange,
+  tuningId,
+  onTuningChange,
+  timeSignatureId,
+  onTimeSignatureChange,
   subdivision,
   onSubdivisionChange,
   bpm,
@@ -84,6 +89,38 @@ export function Controls({
           </SelectContent>
         </Select>
       )}
+
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-text-secondary whitespace-nowrap">Tuning</span>
+        <Select value={tuningId} onValueChange={onTuningChange}>
+          <SelectTrigger size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TUNINGS_LIST.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-text-secondary whitespace-nowrap">Time</span>
+        <Select value={timeSignatureId} onValueChange={onTimeSignatureChange}>
+          <SelectTrigger size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIME_SIGNATURES.map((ts) => (
+              <SelectItem key={ts.id} value={ts.id}>
+                {ts.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <Select value={String(subdivision)} onValueChange={(val) => onSubdivisionChange(Number(val))}>
         <SelectTrigger size="sm">

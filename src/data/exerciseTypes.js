@@ -1,13 +1,33 @@
 // String labels (high to low)
 export const STRING_LABELS = ['e', 'B', 'G', 'D', 'A', 'E'];
 
-// Note subdivisions per beat
+// Note subdivisions per beat (1–8 for freeform scroller)
 export const SUBDIVISIONS = [
   { id: 1, name: '♩', notesPerBeat: 1 },  // Quarter notes
   { id: 2, name: '♪', notesPerBeat: 2 },  // Eighth notes
   { id: 3, name: '³', notesPerBeat: 3 },  // Triplets
   { id: 4, name: '♬', notesPerBeat: 4 },  // 16th notes
+  { id: 5, name: '5', notesPerBeat: 5 },  // Quintuplets
+  { id: 6, name: '6', notesPerBeat: 6 },  // Sextuplets
+  { id: 7, name: '7', notesPerBeat: 7 },  // Septuplets
+  { id: 8, name: '8', notesPerBeat: 8 },  // 8 per beat
 ];
+
+// Time signatures for bar lines (and future count-in)
+export const TIME_SIGNATURES = [
+  { id: '4/4', name: '4/4', beatsPerMeasure: 4 },
+  { id: '3/4', name: '3/4', beatsPerMeasure: 3 },
+  { id: '6/8', name: '6/8', beatsPerMeasure: 3 },   // 3 dotted-quarter beats
+  { id: '12/8', name: '12/8', beatsPerMeasure: 6 }, // 6 dotted-quarter beats
+];
+
+/** Slots (columns) per measure for bar line spacing */
+export function getSlotsPerMeasure(timeSignatureId, subdivision) {
+  const ts = TIME_SIGNATURES.find((t) => t.id === timeSignatureId);
+  const sub = Number(subdivision) || 2;
+  if (!ts) return 4 * sub;
+  return ts.beatsPerMeasure * sub;
+}
 
 // Root notes with their fret position on low E string
 export const ROOT_NOTES = [
@@ -146,6 +166,18 @@ export const EXERCISE_TYPES = [
       { id: 'palm-mute', name: 'With Rests' },
     ],
   },
+  {
+    id: 'riffs',
+    name: 'Riffs',
+    exercises: [{ id: 'random-mix', name: 'Random mix' }, ...RIFFS.map((r) => ({ id: r.id, name: r.name }))],
+    patterns: [{ id: 'default', name: 'Default' }],
+  },
+  {
+    id: 'chord-progressions',
+    name: 'Chord Progressions',
+    exercises: CHORD_PROGRESSIONS.map((p) => ({ id: p.id, name: p.name })),
+    patterns: [{ id: 'default', name: 'Default' }],
+  },
 ];
 
 // Scale intervals from root (in semitones)
@@ -157,7 +189,13 @@ export const SCALE_INTERVALS = {
 };
 
 // String open note semitones from C (e=4, B=11, G=7, D=2, A=9, E=4) - string index 0 high e to 5 low E
-export const STRING_SEMITONES = [4, 11, 7, 2, 9, 4];
+// Sourced from music engine / standard tuning for single source of truth
+import { STANDARD_TUNING } from '../data/tunings.js';
+import { getScale as getScaleFromEngine, getNoteAt } from '../core/music/index.js';
+import { RIFFS, getRiff, getRandomMixTab } from './riffs/index.js';
+import { CHORD_PROGRESSIONS, generateChordProgressionTab } from './chordProgressions.js';
+import { riffToTab } from '../core/exercise/riffToTab.js';
+export const STRING_SEMITONES = STANDARD_TUNING;
 
 // Get position notes for reference page (neutral/key of A). Returns { notes: [[stringIndex, fret], ...] }.
 export function getReferencePosition(scaleTypeId, positionIndex) {
@@ -174,18 +212,18 @@ export function getReferencePosition(scaleTypeId, positionIndex) {
 }
 
 // Get all scale notes across the fretboard for reference (key of A). Returns { notes }.
+// Uses music engine for scale pitch classes and getNoteAt.
 export function getReferenceFullScale(scaleTypeId) {
   const scaleType = scaleTypeId === 'major-3nps' ? 'major' : scaleTypeId === 'minor-3nps' ? 'minor' : scaleTypeId;
   const intervals = SCALE_INTERVALS[scaleType];
   if (!intervals) return { notes: [] };
   const rootSemitone = 9; // A
+  const scaleNotes = getScaleFromEngine(rootSemitone, intervals);
   const notes = [];
   for (let stringIndex = 0; stringIndex < 6; stringIndex++) {
-    const openNote = STRING_SEMITONES[stringIndex];
     for (let fret = 0; fret <= 23; fret++) {
-      const noteSemitone = (openNote + fret) % 12;
-      const intervalFromRoot = (noteSemitone - rootSemitone + 12) % 12;
-      if (intervals.includes(intervalFromRoot)) {
+      const noteSemitone = getNoteAt(stringIndex, fret, STRING_SEMITONES);
+      if (scaleNotes.includes(noteSemitone)) {
         notes.push([stringIndex, fret]);
       }
     }
@@ -487,9 +525,25 @@ function getPositionsForScale(scaleType) {
 }
 
 // Main tab generation function
-export function generateTab(typeId, exerciseId, patternId, rootNote) {
+export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision = 2) {
   const type = EXERCISE_TYPES.find(t => t.id === typeId);
   if (!type) return [];
+
+  if (typeId === 'riffs') {
+    if (exerciseId === 'random-mix') {
+      return getRandomMixTab(subdivision, 3);
+    }
+    const riff = getRiff(exerciseId);
+    if (!riff) return [];
+    const subDiv = riff.subdivisionsPerBeat ?? subdivision;
+    return riffToTab(riff, subDiv);
+  }
+
+  if (typeId === 'chord-progressions') {
+    const preset = CHORD_PROGRESSIONS.find((p) => p.id === exerciseId);
+    if (!preset) return [];
+    return generateChordProgressionTab(preset.progression, subdivision);
+  }
 
   if (typeId === 'pentatonic') {
     const exercise = type.exercises.find(e => e.id === exerciseId);

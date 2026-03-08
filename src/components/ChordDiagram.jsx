@@ -1,14 +1,15 @@
 import { isRootAt } from '../data/basicChords';
+import { STANDARD_TUNING } from '../data/tunings';
 
 const NUM_COLUMNS = 5;
 const cellWidth = 28;
 const fretRowHeight = 18;
 const stringRowHeight = 16;
 
-export function ChordDiagram({ chord, title = '', chordType = '' }) {
+export function ChordDiagram({ chord, title = '', chordType = '', tuning = STANDARD_TUNING }) {
   if (!chord || !chord.frets || chord.frets.length !== 6) return null;
 
-  const { frets, root, startFret = 0 } = chord;
+  const { frets, root, startFret = 0, barre } = chord;
   // Column 0 always present (mute/open); labels: blank, then startFret-based (e.g. B major ['',2,3,4,5])
   const firstFret = startFret || 1;
   const fretLabels = ['', firstFret, firstFret + 1, firstFret + 2, firstFret + 3];
@@ -18,17 +19,10 @@ export function ChordDiagram({ chord, title = '', chordType = '' }) {
   // Column 0 has no left border (never draw vertical line at i=0)
   const skipLineBeforeCol0 = true;
 
-  // Barre: B/F major/minor, first fret column (data 0 when startFret>0), 2+ strings; draw in display column 1
-  const showBarreOnFirstFret =
-    (chordType === 'major' || chordType === 'minor') && (root === 'B' || root === 'F' || root === 'G');
+  // Barre: from chord.barre [colIndex, fromString, toString] or legacy detection
   const barreCol1 =
-    showBarreOnFirstFret &&
-    startFret > 0 &&
-    [0, 1, 2, 3, 4, 5].filter((si) => frets[si] === 0).length >= 2
-      ? (() => {
-          const indices = [0, 1, 2, 3, 4, 5].filter((si) => frets[si] === 0);
-          return { top: Math.min(...indices), bottom: Math.max(...indices) };
-        })()
+    barre && barre.length >= 3
+      ? { colIndex: barre[0], top: barre[1], bottom: barre[2] }
       : null;
 
   return (
@@ -60,7 +54,7 @@ export function ChordDiagram({ chord, title = '', chordType = '' }) {
             <div
               className="absolute pointer-events-none bg-accent z-[5]"
               style={{
-                left: cellWidth + cellWidth / 2 - 2,
+                left: barreCol1.colIndex * cellWidth + cellWidth / 2 - 2,
                 width: 4,
                 top: fretRowHeight + barreCol1.top * stringRowHeight + stringRowHeight / 2 - 2,
                 height: (barreCol1.bottom - barreCol1.top) * stringRowHeight + 4,
@@ -99,7 +93,7 @@ export function ChordDiagram({ chord, title = '', chordType = '' }) {
                   // When startFret > 0, data 0 = first fret (col 1), 1 = second (col 2), etc. So display at colIndex = col + 1
                   const displayCol = startFret > 0 && col >= 0 ? col + 1 : col;
                   const showDot = col >= 0 && displayCol === colIndex && !isOpen;
-                  const showRoot = showDot && isRootAt(stringIndex, col, startFret, root);
+                  const showRoot = showDot && isRootAt(stringIndex, col, startFret, root, tuning);
                   return (
                     <div
                       key={colIndex}

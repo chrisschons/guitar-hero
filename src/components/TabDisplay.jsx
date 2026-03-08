@@ -1,27 +1,29 @@
 import { motion } from 'framer-motion';
-import { STRING_LABELS } from '../data/exerciseTypes';
+import { getStringLabels } from '../core/music';
+import { STANDARD_TUNING } from '../data/tunings';
+import { getSlotsPerMeasure, TIME_SIGNATURES } from '../data/exerciseTypes';
 
 const COLUMN_WIDTH = 50;
 const PADDING_COLUMNS = 3;
 const PLAYHEAD_OFFSET = 50; // tuned to align note with playhead when sound plays
 const INITIAL_SCROLL = (PADDING_COLUMNS * COLUMN_WIDTH) - PLAYHEAD_OFFSET; // 100px
 
-export function TabDisplay({ tab, scrollPosition, currentBeat, countIn, activeNoteIndex, subdivision = 2 }) {
-  // Calculate which column is at the playhead based on scroll position (smoother than tick-based)
-  const scrollBasedIndex = activeNoteIndex >= 0 
+export function TabDisplay({ tab, scrollPosition, currentBeat, countIn, activeNoteIndex, subdivision = 2, timeSignatureId = '4/4', tuning = STANDARD_TUNING }) {
+  const stringLabels = getStringLabels(tuning);
+  const subDiv = Number(subdivision) || 2;
+  const notesPerMeasure = getSlotsPerMeasure(timeSignatureId, subDiv);
+  const beatsPerMeasure = TIME_SIGNATURES.find((t) => t.id === timeSignatureId)?.beatsPerMeasure ?? 4;
+
+  const scrollBasedIndex = activeNoteIndex >= 0
     ? Math.floor(Math.max(0, scrollPosition - INITIAL_SCROLL) / COLUMN_WIDTH) % tab.length
     : -1;
-  
-  // Notes per measure (4 beats * subdivision) - ensure subdivision is a number
-  const subDiv = Number(subdivision) || 2;
-  const notesPerMeasure = 4 * subDiv;
 
   return (
     <div className="relative bg-bg-secondary pt-10 pb-6 pl-14 pr-6 overflow-hidden">
       {/* Beat indicator */}
       <div className="absolute top-2 left-0 right-0 flex justify-center items-center h-6 z-20">
         <div className="flex gap-2">
-          {[0, 1, 2, 3].map((beat) => {
+          {Array.from({ length: beatsPerMeasure }, (_, beat) => beat).map((beat) => {
             // During count-in, countIn goes 4→3→2→1, so active beat is (4 - countIn)
             const activeBeat = countIn > 0 ? (4 - countIn) : currentBeat;
             const isActive = activeBeat === beat;
@@ -56,7 +58,7 @@ export function TabDisplay({ tab, scrollPosition, currentBeat, countIn, activeNo
 
       {/* String labels */}
       <div className="absolute left-4 top-10 h-[180px] flex flex-col justify-between py-2">
-        {STRING_LABELS.map((label) => (
+        {stringLabels.map((label) => (
           <span 
             key={label} 
             className="font-mono text-lg font-bold text-text-secondary h-6 flex items-center"

@@ -1,0 +1,68 @@
+{
+  "name": "basic_chug",
+  "style": "metal",
+  "difficulty": "beginner",
+  "timeSignature": "4/4",
+  "bpmRange": [
+    80,
+    160
+  ],
+  "notes": [
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 1,
+      "subdivision": 1,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 1,
+      "subdivision": 3,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 2,
+      "subdivision": 1,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 2,
+      "subdivision": 3,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 3,
+      "subdivision": 1,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 3,
+      "subdivision": 3,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 4,
+      "subdivision": 1,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 4,
+      "subdivision": 3,
+      "duration": 1
+    }
+  ]
+}

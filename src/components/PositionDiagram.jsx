@@ -1,13 +1,15 @@
-import { STRING_SEMITONES } from '../data/exerciseTypes';
+import { getNoteAt, isRootNote as isRootNoteEngine } from '../core/music';
+import { STANDARD_TUNING } from '../data/tunings';
 
-const ROOT_SEMITONE_A = 9;
-
-function isRootNote(stringIndex, fret) {
-  const openNote = STRING_SEMITONES[stringIndex];
-  return (openNote + fret) % 12 === ROOT_SEMITONE_A;
+/**
+ * Check if the note at (stringIndex, fret) is the root pitch class (for scale reference).
+ */
+function isRootNoteInScale(stringIndex, fret, rootSemitone, tuning) {
+  const semitone = getNoteAt(stringIndex, fret, tuning);
+  return isRootNoteEngine(semitone, rootSemitone);
 }
 
-export function PositionDiagram({ notes, title = '', fullScale = false }) {
+export function PositionDiagram({ notes, title = '', fullScale = false, rootSemitone = 9, tuning = STANDARD_TUNING }) {
   if (!notes.length) return null;
 
   const notesSet = new Set(notes.map(([s, f]) => `${s}-${f}`));
@@ -52,7 +54,7 @@ export function PositionDiagram({ notes, title = '', fullScale = false }) {
                 />
                 {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => {
                   const hasNote = notesSet.has(`${stringIndex}-${fret}`);
-                  const isRoot = hasNote && isRootNote(stringIndex, fret);
+                  const isRoot = hasNote && isRootNoteInScale(stringIndex, fret, rootSemitone, tuning);
                   const isFirstCol = fret === minFret;
                   const isNut = minFret === 0 && isFirstCol;
                   const isFirstLineBold = minFret === 1 && isFirstCol;

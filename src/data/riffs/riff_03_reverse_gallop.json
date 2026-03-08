@@ -1,0 +1,96 @@
+{
+  "name": "reverse_gallop",
+  "style": "metal",
+  "difficulty": "beginner",
+  "timeSignature": "4/4",
+  "bpmRange": [
+    90,
+    150
+  ],
+  "notes": [
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 1,
+      "subdivision": 1,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 1,
+      "subdivision": 2,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 1,
+      "subdivision": 4,
+      "duration": 2
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 2,
+      "subdivision": 1,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 2,
+      "subdivision": 2,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 2,
+      "subdivision": 4,
+      "duration": 2
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 3,
+      "subdivision": 1,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 3,
+      "subdivision": 2,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 3,
+      "subdivision": 4,
+      "duration": 2
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 4,
+      "subdivision": 1,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 4,
+      "subdivision": 2,
+      "duration": 1
+    },
+    {
+      "string": 6,
+      "fret": 0,
+      "beat": 4,
+      "subdivision": 4,
+      "duration": 2
+    }
+  ]
+}

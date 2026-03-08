@@ -7,7 +7,9 @@ import { FretboardDiagram } from './components/FretboardDiagram';
 import { useMetronome } from './hooks/useMetronome';
 import { useAnimationLoop } from './hooks/useAnimationLoop';
 import { useNoteTones } from './hooks/useNoteTones';
-import { EXERCISE_TYPES, SUBDIVISIONS, generateTab, getVisualizationData } from './data/exerciseTypes';
+import { useExercise } from './hooks/useExercise';
+import { EXERCISE_TYPES, SUBDIVISIONS, getVisualizationData } from './data/exerciseTypes';
+import { TUNINGS, STANDARD_TUNING } from './data/tunings';
 
 function App() {
   // Playback state (not persisted)
@@ -15,7 +17,6 @@ function App() {
   const [currentBeat, setCurrentBeat] = useState(-1);
   const [countIn, setCountIn] = useState(0);
   const [scrollPosition, setScrollPosition] = useState(INITIAL_SCROLL);
-  const [currentNotes, setCurrentNotes] = useState([]);
   
   // Persisted settings
   const [bpm, setBpm] = useLocalStorage('guitar-hero-bpm', 120);
@@ -27,6 +28,10 @@ function App() {
   const [patternId, setPatternId] = useLocalStorage('guitar-hero-pattern', 'up-down');
   const [showScroller, setShowScroller] = useLocalStorage('guitar-hero-show-scroller', true);
   const [showFretboard, setShowFretboard] = useLocalStorage('guitar-hero-show-fretboard', true);
+  const [tuningId, setTuningId] = useLocalStorage('guitar-hero-tuning', 'standard');
+  const [timeSignatureId, setTimeSignatureId] = useLocalStorage('guitar-hero-time-signature', '4/4');
+
+  const tuning = TUNINGS[tuningId]?.semitones ?? STANDARD_TUNING;
 
   // Get current type and its exercises/patterns
   const currentType = EXERCISE_TYPES.find(t => t.id === typeId);
@@ -37,11 +42,16 @@ function App() {
   const vizData = useMemo(() => {
     return getVisualizationData(typeId, exerciseId, rootNote);
   }, [typeId, exerciseId, rootNote]);
-  
-  // Generate tab based on type, exercise, pattern, and root
-  const tab = useMemo(() => {
-    return generateTab(typeId, exerciseId, patternId, rootNote);
-  }, [typeId, exerciseId, patternId, rootNote]);
+
+  const {
+    tab,
+    currentNotes,
+    activeNoteIndex,
+    onTick: exerciseOnTick,
+    reset: exerciseReset,
+    getCurrentColumn,
+    getActiveNoteIndex,
+  } = useExercise(typeId, exerciseId, patternId, rootNote, subdivision);
 
   const handleBeat = useCallback((beat) => {
     setCurrentBeat(beat);
@@ -51,41 +61,26 @@ function App() {
     setCountIn(remaining);
   }, []);
 
-  const { playColumn } = useNoteTones(isPlaying, 1);
+  const { playColumn } = useNoteTones(isPlaying, 1, tuning);
 
-  // Track current tick for scroll sync
-  const [currentTick, setCurrentTick] = useState(-1);
+  const handleTick = useCallback(() => {
+    setCountIn(0);
+    exerciseOnTick();
 
-  const handleTick = useCallback((tick) => {
-    setCountIn(0); // Clear count-in display once playing starts
-    setCurrentTick(tick);
-    
-    // Guard against empty tab
-    if (!tab.length) return;
-    
-    // Sync scroll position to tick to prevent drift
-    const noteIndex = tick % tab.length;
-    setScrollPosition(INITIAL_SCROLL + (noteIndex * COLUMN_WIDTH));
-    
-    const column = tab[noteIndex];
-    playColumn(column);
-    
-    // Track all notes being played (for chords)
-    const playingNotes = [];
-    for (let stringIndex = 0; stringIndex < column.length; stringIndex++) {
-      if (column[stringIndex] !== null) {
-        playingNotes.push({ stringIndex, fret: column[stringIndex] });
-      }
+    const noteIndex = getActiveNoteIndex();
+    if (noteIndex >= 0) {
+      setScrollPosition(INITIAL_SCROLL + noteIndex * COLUMN_WIDTH);
     }
-    setCurrentNotes(playingNotes);
-  }, [tab, playColumn]);
+
+    const column = getCurrentColumn();
+    if (column) playColumn(column);
+  }, [exerciseOnTick, getActiveNoteIndex, getCurrentColumn, playColumn]);
 
   const { reset: resetMetronome } = useMetronome(bpm, subdivision, isPlaying, handleBeat, handleTick, handleCountIn, metronomeVolume);
 
   const handleAnimationFrame = useCallback((deltaTime) => {
-    // Don't scroll until first tick happens
-    if (currentTick < 0) return;
-    
+    if (activeNoteIndex < 0) return;
+
     const secondsPerBeat = 60.0 / bpm;
     const secondsPerNote = secondsPerBeat / subdivision;
     const pixelsPerSecond = COLUMN_WIDTH / secondsPerNote;
@@ -93,15 +88,14 @@ function App() {
     setScrollPosition((prev) => {
       const loopWidth = tab.length * COLUMN_WIDTH;
       let newPos = prev + pixelsPerSecond * deltaTime;
-      
-      // When we've scrolled one full loop, jump back seamlessly
+
       if (newPos >= loopWidth + INITIAL_SCROLL) {
         newPos -= loopWidth;
       }
 
       return newPos;
     });
-  }, [bpm, subdivision, tab.length, currentTick]);
+  }, [bpm, subdivision, tab.length, activeNoteIndex]);
 
   const { reset: resetAnimation } = useAnimationLoop(handleAnimationFrame, isPlaying);
 
@@ -113,9 +107,8 @@ function App() {
     setIsPlaying(false);
     setScrollPosition(INITIAL_SCROLL);
     setCurrentBeat(-1);
-    setCurrentTick(-1);
     setCountIn(0);
-    setCurrentNotes([]);
+    exerciseReset();
     resetMetronome();
     resetAnimation();
   };
@@ -144,6 +137,16 @@ function App() {
   const handlePatternChange = (id) => {
     handleReset();
     setPatternId(id);
+  };
+
+  const handleTuningChange = (id) => {
+    handleReset();
+    setTuningId(id);
+  };
+
+  const handleTimeSignatureChange = (id) => {
+    handleReset();
+    setTimeSignatureId(id);
   };
 
   const handleBpmChange = (newBpm) => {
@@ -183,6 +186,10 @@ function App() {
           patternId={patternId}
           patterns={patterns}
           onPatternChange={handlePatternChange}
+          tuningId={tuningId}
+          onTuningChange={handleTuningChange}
+          timeSignatureId={timeSignatureId}
+          onTimeSignatureChange={handleTimeSignatureChange}
           subdivision={subdivision}
           onSubdivisionChange={handleSubdivisionChange}
           bpm={bpm}
@@ -201,18 +208,20 @@ function App() {
 
       <div className="flex-1 flex flex-col">
         {showScroller && (
-          <TabDisplay 
-            tab={tab} 
+          <TabDisplay
+            tab={tab}
             scrollPosition={scrollPosition}
             currentBeat={currentBeat}
             countIn={countIn}
-            activeNoteIndex={currentTick >= 0 ? currentTick % tab.length : -1}
+            activeNoteIndex={activeNoteIndex}
             subdivision={subdivision}
+            timeSignatureId={timeSignatureId}
+            tuning={tuning}
           />
         )}
 
         <div className="max-w-[1200px] mx-auto px-5 mt-6 flex-1 flex flex-col">
-          {showFretboard && <FretboardDiagram vizData={vizData} currentNotes={currentNotes} rootNote={rootNote} />}
+          {showFretboard && <FretboardDiagram vizData={vizData} currentNotes={currentNotes} rootNote={rootNote} tuning={tuning} />}
 
           {/* Play and Reset under fretboard - centered pill buttons */}
           <div className="flex gap-2 mt-4 justify-center">
@@ -236,6 +245,12 @@ function App() {
               className="text-xs text-accent hover:text-accent-light transition-colors"
             >
               Scale Reference
+            </a>
+            <a
+              href="#/tuner"
+              className="text-xs text-accent hover:text-accent-light transition-colors"
+            >
+              Tuner
             </a>
             <a
               href="#/bravura-demo"

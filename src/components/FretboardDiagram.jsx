@@ -1,46 +1,30 @@
-import { STRING_LABELS, SCALE_INTERVALS } from '../data/exerciseTypes';
+import { STANDARD_TUNING } from '../data/tunings';
+import { getNoteAt, getScale, SCALE_INTERVALS, ROOT_SEMITONES, isRootNote, getStringLabels } from '../core/music';
 
 // Full fretboard range to display
 const FRET_RANGE = Array.from({ length: 24 }, (_, i) => i);
 
-// String open note semitones from C (E=4, A=9, D=2, G=7, B=11, e=4)
-const STRING_SEMITONES = [4, 11, 7, 2, 9, 4]; // e, B, G, D, A, E
-
-// Get all frets for a given string, root note, and scale type
-function getScaleFrets(stringIndex, rootSemitone, scaleType = 'pentatonic') {
-  const frets = [];
-  const openNote = STRING_SEMITONES[stringIndex];
+// Get all frets for a given string, root, scale type, and tuning
+function getScaleFrets(stringIndex, rootSemitone, scaleType, tuning) {
   const intervals = SCALE_INTERVALS[scaleType] || SCALE_INTERVALS.pentatonic;
-  
-  for (let fret = 0; fret <= 23; fret++) {
-    const noteSemitone = (openNote + fret) % 12;
-    const intervalFromRoot = (noteSemitone - rootSemitone + 12) % 12;
-    if (intervals.includes(intervalFromRoot)) {
-      frets.push(fret);
-    }
-  }
-  return frets;
-}
-
-// Get all root note frets for a given string
-function getRootFrets(stringIndex, rootSemitone) {
+  const scaleNotes = getScale(rootSemitone, intervals);
   const frets = [];
-  const openNote = STRING_SEMITONES[stringIndex];
-  
   for (let fret = 0; fret <= 23; fret++) {
-    const noteSemitone = (openNote + fret) % 12;
-    if (noteSemitone === rootSemitone) {
-      frets.push(fret);
-    }
+    const note = getNoteAt(stringIndex, fret, tuning);
+    if (scaleNotes.includes(note)) frets.push(fret);
   }
   return frets;
 }
 
-// Root note semitones from C
-const ROOT_SEMITONES = {
-  'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
-  'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
-};
+// Get all root note frets for a given string and tuning
+function getRootFrets(stringIndex, rootSemitone, tuning) {
+  const frets = [];
+  for (let fret = 0; fret <= 23; fret++) {
+    const note = getNoteAt(stringIndex, fret, tuning);
+    if (isRootNote(note, rootSemitone)) frets.push(fret);
+  }
+  return frets;
+}
 
 // Pentatonic position frets in A (base) - which frets belong to each position per string
 // String indices: 0=e, 1=B, 2=G, 3=D, 4=A, 5=E
@@ -112,10 +96,12 @@ function getPowerChordFrets(rootFret, exerciseId) {
   return frets;
 }
 
-export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A' }) {
+export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', tuning = STANDARD_TUNING }) {
   const { type, rootFret = 0, exerciseId = '', positionIndex = 0, offset = 0, exerciseNotes = [], positionNotes = [], scaleType = 'pentatonic' } = vizData || {};
-  
+
   const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9; // Default to A
+
+  const stringLabels = getStringLabels(tuning);
   
   // For power chords, show the chord positions
   const powerChordFrets = type === 'power-chords' ? getPowerChordFrets(rootFret, exerciseId) : null;
@@ -135,7 +121,7 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A' })
       <div className="flex min-w-[700px]">
         {/* String labels */}
         <div className="flex flex-col pr-2 mt-5">
-          {STRING_LABELS.map((label) => (
+          {stringLabels.map((label) => (
             <span 
               key={label} 
               className="text-xs font-mono text-text-secondary h-5 flex items-center"
@@ -178,31 +164,33 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A' })
                   let hasNote = false;
                   let isRoot = false;
                   let inCurrentPosition = false;
-                  
-                  if (type === 'power-chords') {
+
+                  if (type === 'none') {
+                    // Riffs, chord progressions: no scale overlay
+                  } else if (type === 'power-chords') {
                     hasNote = powerChordFrets?.[stringIndex]?.includes(fret);
                     const rootString = exerciseId === 'a-string-climb' ? 4 : 5;
                     isRoot = stringIndex === rootString && (fret === rootFret || fret === rootFret + 12);
                     inCurrentPosition = hasNote;
                   } else if (type === 'scale-runs') {
                     // Scale runs - show full scale, exercise notes at 100%, others at 50%
-                    const scaleFrets = getScaleFrets(stringIndex, rootSemitone, scaleType);
+                    const scaleFrets = getScaleFrets(stringIndex, rootSemitone, scaleType, tuning);
                     hasNote = scaleFrets.includes(fret);
-                    const rootFretsForString = getRootFrets(stringIndex, rootSemitone);
+                    const rootFretsForString = getRootFrets(stringIndex, rootSemitone, tuning);
                     isRoot = rootFretsForString.includes(fret);
                     inCurrentPosition = scaleRunNotesSet?.has(`${stringIndex}-${fret}`) || false;
                   } else if (type === 'blues' || type === 'major-3nps' || type === 'minor-3nps') {
                     // Other scale types - show full scale, position notes at 100%
-                    const scaleFrets = getScaleFrets(stringIndex, rootSemitone, scaleType);
+                    const scaleFrets = getScaleFrets(stringIndex, rootSemitone, scaleType, tuning);
                     hasNote = scaleFrets.includes(fret);
-                    const rootFretsForString = getRootFrets(stringIndex, rootSemitone);
+                    const rootFretsForString = getRootFrets(stringIndex, rootSemitone, tuning);
                     isRoot = rootFretsForString.includes(fret);
                     inCurrentPosition = positionNotesSet?.has(`${stringIndex}-${fret}`) || false;
                   } else {
                     // Pentatonic - check if this fret is in the scale
-                    const scaleFrets = getScaleFrets(stringIndex, rootSemitone, 'pentatonic');
+                    const scaleFrets = getScaleFrets(stringIndex, rootSemitone, 'pentatonic', tuning);
                     hasNote = scaleFrets.includes(fret);
-                    const rootFretsForString = getRootFrets(stringIndex, rootSemitone);
+                    const rootFretsForString = getRootFrets(stringIndex, rootSemitone, tuning);
                     isRoot = rootFretsForString.includes(fret);
                     inCurrentPosition = isInPosition(stringIndex, fret, positionIndex, offset);
                   }
