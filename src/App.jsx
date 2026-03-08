@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Play, Pause, ArrowLeftToLine } from 'lucide-react';
+import { Play, Pause, ArrowLeftToLine, Metronome } from 'lucide-react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Controls } from './components/Controls';
 import { TabDisplay, COLUMN_WIDTH, INITIAL_SCROLL } from './components/TabDisplay';
 import { FretboardDiagram } from './components/FretboardDiagram';
+import { Slider } from './components/ui/Slider';
 import { useMetronome } from './hooks/useMetronome';
 import { useAnimationLoop } from './hooks/useAnimationLoop';
 import { useNoteTones } from './hooks/useNoteTones';
@@ -26,7 +27,7 @@ function App() {
   const [typeId, setTypeId] = useLocalStorage('guitar-hero-type', 'pentatonic');
   const [exerciseId, setExerciseId] = useLocalStorage('guitar-hero-exercise', 'pos1');
   const [patternId, setPatternId] = useLocalStorage('guitar-hero-pattern', 'up-down');
-  const [showScroller, setShowScroller] = useLocalStorage('guitar-hero-show-scroller', true);
+  const [tabScrollMode, setTabScrollMode] = useLocalStorage('guitar-hero-tab-scroll', false);
   const [showFretboard, setShowFretboard] = useLocalStorage('guitar-hero-show-fretboard', true);
   const [tuningId, setTuningId] = useLocalStorage('guitar-hero-tuning', 'standard');
   const [timeSignatureId, setTimeSignatureId] = useLocalStorage('guitar-hero-time-signature', '4/4');
@@ -80,6 +81,7 @@ function App() {
 
   const handleAnimationFrame = useCallback((deltaTime) => {
     if (activeNoteIndex < 0) return;
+    if (countIn > 0) return; // Pause scrolling during count-in
 
     const secondsPerBeat = 60.0 / bpm;
     const secondsPerNote = secondsPerBeat / subdivision;
@@ -95,7 +97,7 @@ function App() {
 
       return newPos;
     });
-  }, [bpm, subdivision, tab.length, activeNoteIndex]);
+  }, [bpm, subdivision, tab.length, activeNoteIndex, countIn]);
 
   const { reset: resetAnimation } = useAnimationLoop(handleAnimationFrame, isPlaying);
 
@@ -192,25 +194,23 @@ function App() {
           onTimeSignatureChange={handleTimeSignatureChange}
           subdivision={subdivision}
           onSubdivisionChange={handleSubdivisionChange}
-          bpm={bpm}
-          onBpmChange={handleBpmChange}
           isPlaying={isPlaying}
           onPlayToggle={handlePlayToggle}
           onReset={handleReset}
           metronomeVolume={metronomeVolume}
           onMetronomeVolumeChange={setMetronomeVolume}
-          showScroller={showScroller}
-          onShowScrollerChange={setShowScroller}
+          tabScrollMode={tabScrollMode}
+          onTabScrollModeChange={setTabScrollMode}
           showFretboard={showFretboard}
           onShowFretboardChange={setShowFretboard}
         />
       </div>
 
       <div className="flex-1 flex flex-col">
-        {showScroller && (
-          <TabDisplay
+        <TabDisplay
             tab={tab}
             scrollPosition={scrollPosition}
+            scrollMode={tabScrollMode}
             currentBeat={currentBeat}
             countIn={countIn}
             activeNoteIndex={activeNoteIndex}
@@ -218,25 +218,38 @@ function App() {
             timeSignatureId={timeSignatureId}
             tuning={tuning}
           />
-        )}
 
         <div className="max-w-[1200px] mx-auto px-5 mt-6 flex-1 flex flex-col">
           {showFretboard && <FretboardDiagram vizData={vizData} currentNotes={currentNotes} rootNote={rootNote} tuning={tuning} />}
 
-          {/* Play and Reset under fretboard - centered pill buttons */}
-          <div className="flex gap-2 mt-4 justify-center">
-            <button
-              onClick={handlePlayToggle}
-              className="flex items-center gap-2 px-5 py-2 rounded-full bg-accent text-white text-sm font-medium cursor-pointer transition-all hover:bg-accent-light"
-            >
-              {isPlaying ? <><Pause size={18} /><span>Pause</span></> : <><Play size={18} /><span>Play</span></>}
-            </button>
-            <button
-              onClick={handleReset}
-              className="flex items-center justify-center p-2 rounded-full bg-bg-tertiary text-text-primary cursor-pointer transition-all hover:bg-[#1a4a7a]"
-            >
-              <ArrowLeftToLine size={18} />
-            </button>
+          {/* Play, Reset, and BPM in one line */}
+          <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
+            <div className="flex gap-2 items-center">
+              <button
+                onClick={handleReset}
+                className="flex items-center justify-center p-2 rounded-full bg-bg-tertiary text-text-primary cursor-pointer transition-all hover:bg-[#1a4a7a]"
+              >
+                <ArrowLeftToLine size={18} />
+              </button>
+              <button
+                onClick={handlePlayToggle}
+                className="flex items-center gap-2 px-5 py-2 rounded-full bg-accent text-white text-sm font-medium cursor-pointer transition-all hover:bg-accent-light"
+              >
+                {isPlaying ? <><Pause size={18} /><span>Pause</span></> : <><Play size={18} /><span>Play</span></>}
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Metronome className="h-5 w-5 text-text-secondary shrink-0" />
+              <Slider
+                value={[bpm]}
+                onValueChange={([value]) => setBpm(value)}
+                min={40}
+                max={220}
+                step={1}
+                className="w-[100px]"
+              />
+              <span className="text-sm font-medium text-text-primary tabular-nums w-8 text-right">{bpm}</span>
+            </div>
           </div>
 
           <footer className="mt-auto pt-12 pb-6 text-center space-x-4">

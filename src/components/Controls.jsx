@@ -1,6 +1,7 @@
-import { Tally3 } from 'lucide-react';
+import { Tally3, Guitar } from 'lucide-react';
 import { ROOT_NOTES, EXERCISE_TYPES, SUBDIVISIONS, TIME_SIGNATURES } from '../data/exerciseTypes';
 import { TUNINGS_LIST } from '../data/tunings';
+import { getStringLabels } from '../core/music';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
@@ -22,20 +23,34 @@ export function Controls({
   onTimeSignatureChange,
   subdivision,
   onSubdivisionChange,
-  bpm,
-  onBpmChange,
   isPlaying,
   onPlayToggle,
   onReset,
   metronomeVolume,
   onMetronomeVolumeChange,
-  showScroller,
-  onShowScrollerChange,
+  tabScrollMode,
+  onTabScrollModeChange,
   showFretboard,
   onShowFretboardChange
 }) {
   return (
     <div className="flex flex-wrap gap-3 justify-center items-center p-3">
+      <Select value={tuningId} onValueChange={onTuningChange}>
+        <SelectTrigger size="sm" className="w-8 h-6 justify-center px-1.5" title={TUNINGS_LIST.find((t) => t.id === tuningId)?.name ?? 'Tuning'}>
+          <Guitar className="h-4 w-4 shrink-0" />
+        </SelectTrigger>
+        <SelectContent>
+          {TUNINGS_LIST.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.name}{' '}
+              <span className="text-xs text-text-secondary">
+                {getStringLabels(t.semitones).join(' ')}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
       <Select value={rootNote} onValueChange={onRootChange}>
         <SelectTrigger size="sm">
           <SelectValue />
@@ -91,22 +106,6 @@ export function Controls({
       )}
 
       <div className="flex items-center gap-1.5">
-        <span className="text-xs text-text-secondary whitespace-nowrap">Tuning</span>
-        <Select value={tuningId} onValueChange={onTuningChange}>
-          <SelectTrigger size="sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TUNINGS_LIST.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex items-center gap-1.5">
         <span className="text-xs text-text-secondary whitespace-nowrap">Time</span>
         <Select value={timeSignatureId} onValueChange={onTimeSignatureChange}>
           <SelectTrigger size="sm">
@@ -135,18 +134,6 @@ export function Controls({
         </SelectContent>
       </Select>
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-text-secondary w-7 text-right">{bpm}</span>
-        <Slider
-          value={[bpm]}
-          onValueChange={([value]) => onBpmChange(value)}
-          min={40}
-          max={220}
-          step={1}
-          className="w-[100px]"
-        />
-      </div>
-
       <div className="hidden flex items-center gap-2">
         <span className="text-xs text-text-secondary">Click</span>
         <Slider
@@ -161,8 +148,8 @@ export function Controls({
 
       <div className="flex items-center gap-2">
         <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
-          <Switch checked={showScroller} onCheckedChange={onShowScrollerChange} />
-          <span>Scroller</span>
+          <Switch checked={tabScrollMode} onCheckedChange={onTabScrollModeChange} />
+          <span>Scroll</span>
         </label>
         <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
           <Switch checked={showFretboard} onCheckedChange={onShowFretboardChange} />

@@ -41,6 +41,8 @@ function playClickAt(ctx, frequency, gainValue, when) {
  */
 export function createMetronome(options) {
   const { bpm, subdivision, volume = 0.3, onBeat, onTick, onCountIn } = options;
+  const maxGain = 0.5;
+  const effectiveVolume = Math.min(1, volume) * maxGain;
 
   let nextNoteTime = 0;
   let currentBeat = 0;
@@ -65,7 +67,8 @@ export function createMetronome(options) {
         countIn += 1;
         setTimeout(() => {
           const c = getAudioContext();
-          playClickAt(c, 1200, 0.5, c.currentTime);
+          const countInGain = effectiveVolume > 0 ? effectiveVolume : 0.25;
+          playClickAt(c, 1200, countInGain, c.currentTime);
           onCountIn?.(countValue);
           onBeat?.(currentBeat);
         }, Math.max(0, delayMs));
@@ -73,11 +76,11 @@ export function createMetronome(options) {
         currentBeat = (currentBeat + 1) % 4;
       } else {
         const isOnBeat = currentSubBeat === 0;
-        if (isOnBeat && volume > 0) {
+        if (isOnBeat && effectiveVolume > 0) {
           setTimeout(() => {
             const c = getAudioContext();
             const freq = currentBeat === 0 ? 1000 : 800;
-            const gain = currentBeat === 0 ? volume : volume * 0.4;
+            const gain = currentBeat === 0 ? effectiveVolume : effectiveVolume * 0.4;
             playClickAt(c, freq, gain, c.currentTime);
           }, Math.max(0, delayMs));
         }

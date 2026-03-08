@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useRef, useState, useEffect, Fragment } from 'react';
 import { getStringLabels } from '../core/music';
 import { STANDARD_TUNING } from '../data/tunings';
 import { getSlotsPerMeasure, TIME_SIGNATURES } from '../data/exerciseTypes';
@@ -8,15 +9,52 @@ const PADDING_COLUMNS = 3;
 const PLAYHEAD_OFFSET = 50; // tuned to align note with playhead when sound plays
 const INITIAL_SCROLL = (PADDING_COLUMNS * COLUMN_WIDTH) - PLAYHEAD_OFFSET; // 100px
 
-export function TabDisplay({ tab, scrollPosition, currentBeat, countIn, activeNoteIndex, subdivision = 2, timeSignatureId = '4/4', tuning = STANDARD_TUNING }) {
+// Compact static (wrapped) view
+const STATIC_COLUMN_WIDTH = 28;
+const STATIC_ROW_HEIGHT = 72;
+const STATIC_STRING_HEIGHT = 12;
+const STATIC_ROW_GAP = 40;
+
+export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBeat, countIn, activeNoteIndex, subdivision = 2, timeSignatureId = '4/4', tuning = STANDARD_TUNING }) {
   const stringLabels = getStringLabels(tuning);
   const subDiv = Number(subdivision) || 2;
   const notesPerMeasure = getSlotsPerMeasure(timeSignatureId, subDiv);
   const beatsPerMeasure = TIME_SIGNATURES.find((t) => t.id === timeSignatureId)?.beatsPerMeasure ?? 4;
 
+  const loopWidth = tab.length * COLUMN_WIDTH;
   const scrollBasedIndex = activeNoteIndex >= 0
     ? Math.floor(Math.max(0, scrollPosition - INITIAL_SCROLL) / COLUMN_WIDTH) % tab.length
     : -1;
+
+  // Static view: wrap to fit on screen (no horizontal overflow)
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  useEffect(() => {
+    if (scrollMode || !containerRef.current) return;
+    const el = containerRef.current;
+    const ro = new ResizeObserver(() => setContainerWidth(el.offsetWidth));
+    ro.observe(el);
+    setContainerWidth(el.offsetWidth);
+    return () => ro.disconnect();
+  }, [scrollMode]);
+
+  const contentWidth = Math.max(0, containerWidth);
+  const maxCols = Math.floor(contentWidth / STATIC_COLUMN_WIDTH);
+  const colsPerRow = Math.max(
+    notesPerMeasure,
+    Math.floor(maxCols / notesPerMeasure) * notesPerMeasure
+  );
+  const numRows = tab.length ? Math.ceil(tab.length / colsPerRow) : 0;
+  const linearIndex = scrollBasedIndex >= 0 ? scrollBasedIndex % tab.length : -1;
+  // Smooth playhead: use fractional position from scrollPosition (updated by animation loop)
+  const positionInTabPixels = tab.length > 0
+    ? ((scrollPosition - INITIAL_SCROLL) % loopWidth + loopWidth) % loopWidth
+    : 0;
+  const positionInTab = tab.length > 0 ? positionInTabPixels / COLUMN_WIDTH : 0; // fractional column index
+  const playheadRow = numRows > 0 ? Math.floor(positionInTab / colsPerRow) % numRows : -1;
+  const playheadColFractional = colsPerRow > 0 ? positionInTab % colsPerRow : 0; // fractional for smooth scroll
+
+  // (playheadOffset removed: static view always uses wrapped rows and row/col playhead)
 
   return (
     <div className="relative bg-bg-secondary pt-10 pb-6 pl-14 pr-6 overflow-hidden">
@@ -30,7 +68,7 @@ export function TabDisplay({ tab, scrollPosition, currentBeat, countIn, activeNo
             
             return (
               <motion.div
-                key={beat}
+                key={`beat-${beat}`}
                 className={`
                   w-2.5 h-2.5 rounded-full transition-colors
                   ${isActive 
@@ -50,62 +88,126 @@ export function TabDisplay({ tab, scrollPosition, currentBeat, countIn, activeNo
         </div>
       </div>
 
-      {/* Playhead */}
-      <div 
-        className="absolute left-[120px] top-5 bottom-5 w-[3px] bg-accent rounded z-10"
-        style={{ boxShadow: '0 0 10px rgba(233,69,96,0.4), 0 0 20px rgba(233,69,96,0.4)' }}
-      />
+      {/* Playhead: fixed in scroll mode, moving in static mode (wrapped: one per row position) */}
+      {scrollMode ? (
+        <div
+          className="absolute left-[120px] top-5 bottom-5 w-[3px] bg-accent rounded z-10"
+          style={{ boxShadow: '0 0 10px rgba(233,69,96,0.4), 0 0 20px rgba(233,69,96,0.4)' }}
+        />
+      ) : (
+        numRows > 0 && playheadRow >= 0 && (
+          <div
+            className="absolute w-[3px] bg-accent rounded z-10"
+            style={{
+              left: `calc(3.5rem + ${(playheadColFractional / colsPerRow) * contentWidth}px)`,
+              top: `calc(2.5rem + 0.5rem + ${playheadRow * (STATIC_ROW_HEIGHT + STATIC_ROW_GAP)}px)`,
+              height: STATIC_ROW_HEIGHT,
+              boxShadow: '0 0 10px rgba(233,69,96,0.4), 0 0 20px rgba(233,69,96,0.4)',
+            }}
+          />
+        )
+      )}
 
-      {/* String labels */}
-      <div className="absolute left-4 top-10 h-[180px] flex flex-col justify-between py-2">
-        {stringLabels.map((label) => (
-          <span 
-            key={label} 
-            className="font-mono text-lg font-bold text-text-secondary h-6 flex items-center"
-          >
-            {label}
-          </span>
-        ))}
-      </div>
+      {/* String labels: only in scroll mode (static mode has compact labels per row) */}
+      {scrollMode && (
+        <div className="absolute left-4 top-10 h-[180px] flex flex-col justify-between py-2">
+          {stringLabels.map((label, stringIndex) => (
+            <span 
+              key={`string-${stringIndex}`}
+              className="font-mono text-lg font-bold text-text-secondary h-6 flex items-center"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Tab viewport */}
-      <div className="overflow-hidden">
-        <motion.div
-          className="flex h-[180px] relative"
-          style={{ x: -scrollPosition }}
-        >
-          {/* Padding columns at start */}
-          {Array.from({ length: PADDING_COLUMNS }).map((_, i) => (
-            <TabColumn key={`pad-start-${i}`} column={Array(6).fill(null)} />
-          ))}
+      <div
+        ref={containerRef}
+        className="overflow-hidden"
+      >
+        {scrollMode ? (
+          <motion.div
+            className="flex h-[180px] relative"
+            style={{ x: -scrollPosition }}
+          >
+            <Fragment key="pad-start">
+              {Array.from({ length: PADDING_COLUMNS }).map((_, i) => (
+                <TabColumn key={`pad-start-${i}`} column={Array(6).fill(null)} />
+              ))}
+            </Fragment>
 
-          {/* Calculate how many loops needed to fill viewport (aim for ~30 columns minimum) */}
-          {(() => {
-            if (!tab.length) return null;
-            const minColumns = 30;
-            const loopsNeeded = Math.max(2, Math.ceil(minColumns / tab.length));
-            return Array.from({ length: loopsNeeded }).flatMap((_, loopIndex) => (
-              tab.map((column, i) => {
-                // Calculate absolute position across all loops for bar lines
-                const absoluteIndex = loopIndex * tab.length + i;
-                const showBarLine = absoluteIndex % notesPerMeasure === 0;
-                return (
-                  <TabColumn 
-                    key={`loop${loopIndex}-${i}-sub${subDiv}`} 
-                    column={column} 
-                    isActive={loopIndex === 0 && i === scrollBasedIndex}
-                    showBarLine={showBarLine}
-                  />
-                );
-              })
-            ));
-          })()}
+            {/* Calculate how many loops needed to fill viewport (aim for ~30 columns minimum) */}
+            {tab.length > 0 && (
+              <Fragment key="loops">
+                {(() => {
+                  const minColumns = 30;
+                  const loopsNeeded = Math.max(2, Math.ceil(minColumns / tab.length));
+                  return Array.from({ length: loopsNeeded }).flatMap((_, loopIndex) =>
+                    tab.map((column, i) => {
+                      const absoluteIndex = loopIndex * tab.length + i;
+                      const showBarLine = absoluteIndex % notesPerMeasure === 0;
+                      return (
+                        <TabColumn
+                          key={`loop-${loopIndex}-${i}`}
+                          column={column}
+                          isActive={loopIndex === 0 && i === scrollBasedIndex}
+                          showBarLine={showBarLine}
+                        />
+                      );
+                    })
+                  );
+                })()}
+              </Fragment>
+            )}
 
-          {/* Padding columns at end */}
-          {Array.from({ length: PADDING_COLUMNS }).map((_, i) => (
-            <TabColumn key={`pad-end-${i}`} column={Array(6).fill(null)} />
-          ))}
-        </motion.div>
+            <Fragment key="pad-end">
+              {Array.from({ length: PADDING_COLUMNS }).map((_, i) => (
+                <TabColumn key={`pad-end-${i}`} column={Array(6).fill(null)} />
+              ))}
+            </Fragment>
+          </motion.div>
+        ) : (
+          <div className="flex flex-col pt-2">
+            {numRows > 0 && Array.from({ length: numRows }).map((_, rowIndex) => {
+              const start = rowIndex * colsPerRow;
+              const rowColumns = tab.slice(start, start + colsPerRow);
+              const paddedColumns =
+                rowColumns.length < colsPerRow
+                  ? [...rowColumns, ...Array.from({ length: colsPerRow - rowColumns.length }, () => Array(6).fill(null))]
+                  : rowColumns;
+              return (
+                <div
+                  key={`tab-row-${rowIndex}`}
+                  className="flex items-stretch shrink-0"
+                  style={{
+                    height: STATIC_ROW_HEIGHT,
+                    marginBottom: rowIndex < numRows - 1 ? STATIC_ROW_GAP : 0,
+                  }}
+                >
+                  <div className="flex w-full min-w-0">
+                    {paddedColumns.map((column, colIndex) => {
+                      const isRealColumn = colIndex < rowColumns.length;
+                      const linearIdx = isRealColumn ? start + colIndex : -1;
+                      const showBarLine = isRealColumn && linearIdx % notesPerMeasure === 0;
+                      const showEndBarLine = colIndex === paddedColumns.length - 1;
+                      return (
+                        <StaticTabColumn
+                          key={`static-${rowIndex}-${colIndex}`}
+                          column={column}
+                          isActive={linearIdx === scrollBasedIndex}
+                          showBarLine={showBarLine}
+                          showEndBarLine={showEndBarLine}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -114,45 +216,91 @@ export function TabDisplay({ tab, scrollPosition, currentBeat, countIn, activeNo
 function TabColumn({ column, isActive, showBarLine }) {
   return (
     <div 
-      className="flex flex-col justify-between h-full py-2 relative"
+      className="flex flex-col h-full py-2"
       style={{ minWidth: COLUMN_WIDTH }}
     >
-      {/* Bar line at measure boundary */}
-      {showBarLine && (
-        <div 
-          className="absolute left-0 top-0 bottom-0 w-0.5 bg-text-secondary opacity-60"
-        />
-      )}
-      {column.map((note, stringIndex) => (
-        <div
-          key={stringIndex}
-          className="h-6 flex items-center justify-center relative"
-        >
-          {/* String line */}
+      <div className="flex flex-col justify-between flex-1 relative">
+        {showBarLine && (
           <div 
-            className="absolute inset-x-0 top-1/2 h-px bg-string opacity-30"
-            style={{ 
-              height: stringIndex > 2 ? '2px' : '1px',
-              marginTop: stringIndex > 2 ? '-1px' : '0'
-            }}
+            className="absolute left-0 top-0 bottom-0 w-0.5 bg-text-secondary opacity-60"
           />
-          {/* Note */}
-          {note !== null && (
-            <span
-              className={`font-mono text-lg font-bold relative z-2 ${
-                isActive ? 'text-white scale-125' : 'text-accent'
-              }`}
+        )}
+        {column.map((note, stringIndex) => (
+          <div
+            key={`tab-str-${stringIndex}`}
+            className="h-6 flex items-center justify-center relative"
+          >
+            <div 
+              className="absolute inset-x-0 top-1/2 h-px opacity-30"
               style={{ 
-                textShadow: isActive 
-                  ? '0 0 12px rgba(255,255,255,0.8), 0 0 24px rgba(233,69,96,0.6)' 
-                  : '0 0 10px rgba(233,69,96,0.4)' 
+                height: stringIndex > 2 ? 2 : 1,
+                marginTop: stringIndex > 2 ? -1 : 0,
+                backgroundColor: 'var(--color-string)',
               }}
-            >
-              {note}
-            </span>
-          )}
-        </div>
-      ))}
+            />
+            {note !== null && (
+              <span
+                className={`font-mono text-lg font-bold relative text-accent ${
+                  isActive ? 'text-white scale-125' : ''
+                }`}
+                style={{ 
+                  zIndex: 2,
+                  textShadow: isActive 
+                    ? '0 0 12px rgba(255,255,255,0.8), 0 0 24px rgba(233,69,96,0.6)' 
+                    : '0 0 10px rgba(233,69,96,0.4)' 
+                }}
+              >
+                {note}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StaticTabColumn({ column, isActive, showBarLine, showEndBarLine }) {
+  return (
+    <div
+      className="flex flex-col flex-1 min-w-0 h-full relative"
+      style={{ minWidth: STATIC_COLUMN_WIDTH }}
+    >
+      <div className="flex flex-col justify-between flex-1 relative min-h-0">
+        {showBarLine && (
+          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-text-secondary opacity-60" />
+        )}
+        {showEndBarLine && (
+          <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-text-secondary opacity-60" />
+        )}
+        {column.map((note, stringIndex) => (
+          <div
+            key={`tab-str-${stringIndex}`}
+            className="flex items-center justify-center relative shrink-0"
+            style={{ height: STATIC_STRING_HEIGHT }}
+          >
+            <div
+              className="absolute inset-x-0 top-1/2 opacity-30"
+              style={{ height: '1px', marginTop: '-0.5px', backgroundColor: 'var(--color-string)' }}
+            />
+            {note !== null && (
+              <span
+                className={`font-mono text-xs font-bold relative text-accent ${
+                  isActive ? 'text-white scale-110' : ''
+                }`}
+                style={{
+                  zIndex: 2,
+                  textShadow: isActive
+                    ? '0 0 8px rgba(255,255,255,0.8), 0 0 16px rgba(233,69,96,0.6)'
+                    : '0 0 6px rgba(233,69,96,0.4)',
+                }}
+              >
+                {note}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
