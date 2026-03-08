@@ -5,8 +5,6 @@
 
 import { getAudioContext } from './audioContext.js';
 
-const COUNT_IN_BEATS = 4;
-
 /**
  * Play a single click (sine, short envelope).
  * @param {AudioContext} ctx
@@ -34,6 +32,7 @@ function playClickAt(ctx, frequency, gainValue, when) {
  * @param {object} options
  * @param {number} options.bpm
  * @param {number} options.subdivision - notes per beat (1–8)
+ * @param {number} [options.beatsPerBar=4] - beats per bar (from time signature, e.g. 4 for 4/4, 6 for 6/8)
  * @param {number} [options.volume=0.3] - click volume 0–1
  * @param { (beat: number) => void } [options.onBeat]
  * @param { (tick: number) => void } [options.onTick]
@@ -41,12 +40,12 @@ function playClickAt(ctx, frequency, gainValue, when) {
  */
 export function createMetronome(options) {
   const { bpm, subdivision, volume = 0.3, onBeat, onTick, onCountIn } = options;
+  const beatsPerBar = Math.max(1, Number(options.beatsPerBar) || 4);
   const maxGain = 0.5;
   const effectiveVolume = Math.min(1, volume) * maxGain;
 
   let nextNoteTime = 0;
   let currentBeat = 0;
-  let currentSubBeat = 0;
   let currentTick = 0;
   let countIn = 0;
   let timerId = null;
@@ -59,43 +58,44 @@ export function createMetronome(options) {
     const now = ctx.currentTime;
 
     while (nextNoteTime < now + 0.1) {
-      const isCountingIn = countIn < COUNT_IN_BEATS;
+      const countInBeats = beatsPerBar;
+      const isCountingIn = countIn < countInBeats;
       const delayMs = (nextNoteTime - now) * 1000;
 
       if (isCountingIn) {
-        const countValue = COUNT_IN_BEATS - countIn;
+        const countValue = countInBeats - countIn;
         countIn += 1;
         setTimeout(() => {
           const c = getAudioContext();
           const countInGain = effectiveVolume > 0 ? effectiveVolume : 0.25;
           playClickAt(c, 1200, countInGain, c.currentTime);
           onCountIn?.(countValue);
-          onBeat?.(currentBeat);
         }, Math.max(0, delayMs));
         nextNoteTime += secondsPerBeat;
-        currentBeat = (currentBeat + 1) % 4;
+        // Do not advance currentBeat or call onBeat during count-in; first real beat will be 0
       } else {
-        const isOnBeat = currentSubBeat === 0;
-        if (isOnBeat && effectiveVolume > 0) {
+        // Metronome ticks on beats only: play click and report beat
+        const beatForCallback = currentBeat;
+        if (effectiveVolume > 0) {
           setTimeout(() => {
             const c = getAudioContext();
-            const freq = currentBeat === 0 ? 1000 : 800;
-            const gain = currentBeat === 0 ? effectiveVolume : effectiveVolume * 0.4;
+            const freq = beatForCallback === 0 ? 1000 : 800;
+            const gain = beatForCallback === 0 ? effectiveVolume : effectiveVolume * 0.4;
             playClickAt(c, freq, gain, c.currentTime);
           }, Math.max(0, delayMs));
         }
-        setTimeout(() => {
-          if (currentSubBeat === 0) onBeat?.(currentBeat);
-          onTick?.(currentTick);
-        }, Math.max(0, delayMs));
+        setTimeout(() => onBeat?.(beatForCallback), Math.max(0, delayMs));
 
-        nextNoteTime += secondsPerNote;
-        currentTick += 1;
-        currentSubBeat += 1;
-        if (currentSubBeat >= subdivision) {
-          currentSubBeat = 0;
-          currentBeat = (currentBeat + 1) % 4;
+        // Fire onTick at subdivision rate within this beat so the exercise advances correctly
+        for (let sub = 0; sub < subdivision; sub++) {
+          const subDelayMs = (nextNoteTime + sub * secondsPerNote - now) * 1000;
+          const tickForCallback = currentTick + sub;
+          setTimeout(() => onTick?.(tickForCallback), Math.max(0, subDelayMs));
         }
+
+        nextNoteTime += secondsPerBeat;
+        currentTick += subdivision;
+        currentBeat = (currentBeat + 1) % beatsPerBar;
       }
     }
   }
@@ -106,7 +106,6 @@ export function createMetronome(options) {
       if (ctx.state === 'suspended') ctx.resume();
       nextNoteTime = ctx.currentTime;
       currentBeat = 0;
-      currentSubBeat = 0;
       currentTick = 0;
       countIn = 0;
       timerId = setInterval(schedule, 25);
@@ -121,7 +120,6 @@ export function createMetronome(options) {
 
     reset() {
       currentBeat = 0;
-      currentSubBeat = 0;
       currentTick = 0;
       countIn = 0;
       onBeat?.(-1);

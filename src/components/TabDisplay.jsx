@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useRef, useState, useEffect, Fragment } from 'react';
 import { getStringLabels } from '../core/music';
 import { STANDARD_TUNING } from '../data/tunings';
-import { getSlotsPerMeasure, TIME_SIGNATURES } from '../data/exerciseTypes';
+import { getSlotsPerMeasure, TIME_SIGNATURES, getBeatsPerBarForDots } from '../data/exerciseTypes';
 
 const COLUMN_WIDTH = 50;
 const PADDING_COLUMNS = 3;
@@ -15,16 +15,24 @@ const STATIC_ROW_HEIGHT = 72;
 const STATIC_STRING_HEIGHT = 12;
 const STATIC_ROW_GAP = 40;
 
-export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBeat, countIn, activeNoteIndex, subdivision = 2, timeSignatureId = '4/4', tuning = STANDARD_TUNING }) {
+export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBeat, countIn, activeNoteIndex, subdivision = 2, timeSignatureId = '4/4', notesPerMeasureOverride = null, loopTicks = 0, tuning = STANDARD_TUNING }) {
   const stringLabels = getStringLabels(tuning);
   const subDiv = Number(subdivision) || 2;
-  const notesPerMeasure = getSlotsPerMeasure(timeSignatureId, subDiv);
+  const notesPerMeasure = notesPerMeasureOverride ?? getSlotsPerMeasure(timeSignatureId, subDiv);
   const beatsPerMeasure = TIME_SIGNATURES.find((t) => t.id === timeSignatureId)?.beatsPerMeasure ?? 4;
+  const beatsPerBarDots = getBeatsPerBarForDots(timeSignatureId);
 
-  const loopWidth = tab.length * COLUMN_WIDTH;
+  const loopColumns = loopTicks > 0 ? loopTicks : tab.length;
+  const loopWidth = loopColumns * COLUMN_WIDTH;
   const scrollBasedIndex = activeNoteIndex >= 0
-    ? Math.floor(Math.max(0, scrollPosition - INITIAL_SCROLL) / COLUMN_WIDTH) % tab.length
+    ? Math.min(activeNoteIndex, tab.length - 1)
     : -1;
+
+  // Pad tab with blank columns to loopColumns so we draw empty space for rest-of-bar beats
+  const displayTab =
+    loopColumns > tab.length
+      ? [...tab, ...Array.from({ length: loopColumns - tab.length }, () => [null, null, null, null, null, null])]
+      : tab;
 
   // Static view: wrap to fit on screen (no horizontal overflow)
   const containerRef = useRef(null);
@@ -44,8 +52,8 @@ export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBea
     notesPerMeasure,
     Math.floor(maxCols / notesPerMeasure) * notesPerMeasure
   );
-  const numRows = tab.length ? Math.ceil(tab.length / colsPerRow) : 0;
-  const linearIndex = scrollBasedIndex >= 0 ? scrollBasedIndex % tab.length : -1;
+  const numRows = (loopColumns || tab.length) ? Math.ceil((loopColumns || tab.length) / colsPerRow) : 0;
+  const linearIndex = scrollBasedIndex >= 0 ? Math.min(scrollBasedIndex, tab.length - 1) : -1;
   // Smooth playhead: use fractional position from scrollPosition (updated by animation loop)
   const positionInTabPixels = tab.length > 0
     ? ((scrollPosition - INITIAL_SCROLL) % loopWidth + loopWidth) % loopWidth
@@ -53,6 +61,7 @@ export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBea
   const positionInTab = tab.length > 0 ? positionInTabPixels / COLUMN_WIDTH : 0; // fractional column index
   const playheadRow = numRows > 0 ? Math.floor(positionInTab / colsPerRow) % numRows : -1;
   const playheadColFractional = colsPerRow > 0 ? positionInTab % colsPerRow : 0; // fractional for smooth scroll
+  const playheadColumnIndex = Math.min(loopColumns - 1, Math.max(0, Math.floor(positionInTab)));
 
   // (playheadOffset removed: static view always uses wrapped rows and row/col playhead)
 
@@ -61,10 +70,10 @@ export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBea
       {/* Beat indicator */}
       <div className="absolute top-2 left-0 right-0 flex justify-center items-center h-6 z-20">
         <div className="flex gap-2">
-          {Array.from({ length: beatsPerMeasure }, (_, beat) => beat).map((beat) => {
-            // During count-in, countIn goes 4→3→2→1, so active beat is (4 - countIn)
-            const activeBeat = countIn > 0 ? (4 - countIn) : currentBeat;
-            const isActive = activeBeat === beat;
+          {Array.from({ length: beatsPerBarDots }, (_, beat) => beat).map((beat) => {
+            // During count-in, countIn is remaining (e.g. 6→1 for 6/8); highlight dot (beatsPerBarDots - countIn)
+            const activeBeat = countIn > 0 ? Math.max(0, beatsPerBarDots - countIn) : currentBeat;
+            const isActive = activeBeat >= 0 && activeBeat === beat;
             
             return (
               <motion.div
@@ -172,7 +181,7 @@ export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBea
           <div className="flex flex-col pt-2">
             {numRows > 0 && Array.from({ length: numRows }).map((_, rowIndex) => {
               const start = rowIndex * colsPerRow;
-              const rowColumns = tab.slice(start, start + colsPerRow);
+              const rowColumns = displayTab.slice(start, start + colsPerRow);
               const paddedColumns =
                 rowColumns.length < colsPerRow
                   ? [...rowColumns, ...Array.from({ length: colsPerRow - rowColumns.length }, () => Array(6).fill(null))]
@@ -188,15 +197,16 @@ export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBea
                 >
                   <div className="flex w-full min-w-0">
                     {paddedColumns.map((column, colIndex) => {
-                      const isRealColumn = colIndex < rowColumns.length;
-                      const linearIdx = isRealColumn ? start + colIndex : -1;
-                      const showBarLine = isRealColumn && linearIdx % notesPerMeasure === 0;
-                      const showEndBarLine = colIndex === paddedColumns.length - 1;
+                      const linearIdx = start + colIndex;
+                      const isRealColumn = linearIdx < tab.length;
+                      const showBarLine = linearIdx < loopColumns && linearIdx % notesPerMeasure === 0;
+                      const showEndBarLine = linearIdx === loopColumns - 1 || colIndex === paddedColumns.length - 1;
+                      const isActive = linearIdx === playheadColumnIndex;
                       return (
                         <StaticTabColumn
                           key={`static-${rowIndex}-${colIndex}`}
                           column={column}
-                          isActive={linearIdx === scrollBasedIndex}
+                          isActive={isActive}
                           showBarLine={showBarLine}
                           showEndBarLine={showEndBarLine}
                         />

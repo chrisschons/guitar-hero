@@ -9,8 +9,9 @@ import { useMetronome } from './hooks/useMetronome';
 import { useAnimationLoop } from './hooks/useAnimationLoop';
 import { useNoteTones } from './hooks/useNoteTones';
 import { useExercise } from './hooks/useExercise';
-import { EXERCISE_TYPES, SUBDIVISIONS, getVisualizationData } from './data/exerciseTypes';
+import { EXERCISE_TYPES, SUBDIVISIONS, getVisualizationData, getSlotsPerMeasure } from './data/exerciseTypes';
 import { TUNINGS, STANDARD_TUNING } from './data/tunings';
+import { getRiff } from './data/riffs';
 
 function App() {
   // Playback state (not persisted)
@@ -34,6 +35,44 @@ function App() {
 
   const tuning = TUNINGS[tuningId]?.semitones ?? STANDARD_TUNING;
 
+  // For riffs, use the riff's time signature for dots and metronome; otherwise use global timeSignatureId
+  const effectiveTimeSignatureId = useMemo(() => {
+    if (typeId === 'riffs') {
+      const riff = getRiff(exerciseId);
+      if (riff?.timeSignature) {
+        return `${riff.timeSignature.num}/${riff.timeSignature.denom}`;
+      }
+    }
+    return timeSignatureId;
+  }, [typeId, exerciseId, timeSignatureId]);
+
+  // For riffs, notes per measure = columns per bar from the riff (so bar lines match); otherwise from time sig + subdivision
+  const notesPerMeasureOverride = useMemo(() => {
+    if (typeId === 'riffs') {
+      const riff = getRiff(exerciseId);
+      if (riff?.timeSignature) {
+        const sub = riff.subdivisionsPerBeat ?? 2;
+        return riff.timeSignature.num * sub;
+      }
+    }
+    return null;
+  }, [typeId, exerciseId]);
+
+  // For riffs, use the riff's subdivisionsPerBeat so metronome and scroll advance at subdivision rate (e.g. 8 ticks/bar for 4/4 with 2)
+  const effectiveSubdivision = useMemo(() => {
+    if (typeId === 'riffs') {
+      const riff = getRiff(exerciseId);
+      return riff?.subdivisionsPerBeat ?? 2;
+    }
+    return subdivision;
+  }, [typeId, exerciseId, subdivision]);
+
+  // Ticks per bar for bar-aligned looping (blank space at end of bar before loop)
+  const effectiveTicksPerBar = useMemo(
+    () => notesPerMeasureOverride ?? getSlotsPerMeasure(effectiveTimeSignatureId, effectiveSubdivision),
+    [notesPerMeasureOverride, effectiveTimeSignatureId, effectiveSubdivision]
+  );
+
   // Get current type and its exercises/patterns
   const currentType = EXERCISE_TYPES.find(t => t.id === typeId);
   const exercises = currentType?.exercises || [];
@@ -52,7 +91,8 @@ function App() {
     reset: exerciseReset,
     getCurrentColumn,
     getActiveNoteIndex,
-  } = useExercise(typeId, exerciseId, patternId, rootNote, subdivision);
+    loopTicks,
+  } = useExercise(typeId, exerciseId, patternId, rootNote, subdivision, effectiveTicksPerBar);
 
   const handleBeat = useCallback((beat) => {
     setCurrentBeat(beat);
@@ -68,27 +108,27 @@ function App() {
     setCountIn(0);
     exerciseOnTick();
 
+    const column = getCurrentColumn();
     const noteIndex = getActiveNoteIndex();
-    if (noteIndex >= 0) {
+    if (noteIndex >= 0 && column) {
       setScrollPosition(INITIAL_SCROLL + noteIndex * COLUMN_WIDTH);
     }
 
-    const column = getCurrentColumn();
     if (column) playColumn(column);
   }, [exerciseOnTick, getActiveNoteIndex, getCurrentColumn, playColumn]);
 
-  const { reset: resetMetronome } = useMetronome(bpm, subdivision, isPlaying, handleBeat, handleTick, handleCountIn, metronomeVolume);
+  const { reset: resetMetronome } = useMetronome(bpm, effectiveSubdivision, isPlaying, handleBeat, handleTick, handleCountIn, metronomeVolume, effectiveTimeSignatureId);
 
   const handleAnimationFrame = useCallback((deltaTime) => {
     if (activeNoteIndex < 0) return;
     if (countIn > 0) return; // Pause scrolling during count-in
 
     const secondsPerBeat = 60.0 / bpm;
-    const secondsPerNote = secondsPerBeat / subdivision;
+    const secondsPerNote = secondsPerBeat / effectiveSubdivision;
     const pixelsPerSecond = COLUMN_WIDTH / secondsPerNote;
 
     setScrollPosition((prev) => {
-      const loopWidth = tab.length * COLUMN_WIDTH;
+      const loopWidth = (loopTicks > 0 ? loopTicks : tab.length) * COLUMN_WIDTH;
       let newPos = prev + pixelsPerSecond * deltaTime;
 
       if (newPos >= loopWidth + INITIAL_SCROLL) {
@@ -97,7 +137,7 @@ function App() {
 
       return newPos;
     });
-  }, [bpm, subdivision, tab.length, activeNoteIndex, countIn]);
+  }, [bpm, effectiveSubdivision, tab.length, loopTicks, activeNoteIndex, countIn]);
 
   const { reset: resetAnimation } = useAnimationLoop(handleAnimationFrame, isPlaying);
 
@@ -214,8 +254,10 @@ function App() {
             currentBeat={currentBeat}
             countIn={countIn}
             activeNoteIndex={activeNoteIndex}
-            subdivision={subdivision}
-            timeSignatureId={timeSignatureId}
+            subdivision={effectiveSubdivision}
+            timeSignatureId={effectiveTimeSignatureId}
+            notesPerMeasureOverride={notesPerMeasureOverride}
+            loopTicks={loopTicks}
             tuning={tuning}
           />
 

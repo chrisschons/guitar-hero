@@ -1,11 +1,12 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { getAudioContext, resumeAudioContext, createMetronome } from '../core/audio';
+import { getBeatsPerBarForDots } from '../data/exerciseTypes';
 
 /**
  * Thin wrapper around core/audio metronome. Starts/stops when isPlaying changes;
- * recreates metronome when bpm, subdivision, or volume change.
+ * recreates metronome when bpm, subdivision, volume, or timeSignatureId change.
  */
-export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCountIn, volume = 0.3) {
+export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCountIn, volume = 0.3, timeSignatureId = '4/4') {
   const metronomeRef = useRef(null);
   const onBeatRef = useRef(onBeat);
   const onTickRef = useRef(onTick);
@@ -14,10 +15,13 @@ export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCoun
   onTickRef.current = onTick;
   onCountInRef.current = onCountIn;
 
+  const beatsPerBar = getBeatsPerBarForDots(timeSignatureId);
+
   useEffect(() => {
     const meta = createMetronome({
       bpm,
       subdivision,
+      beatsPerBar,
       volume,
       onBeat: (beat) => onBeatRef.current?.(beat),
       onTick: (tick) => onTickRef.current?.(tick),
@@ -28,7 +32,7 @@ export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCoun
       meta.stop();
       metronomeRef.current = null;
     };
-  }, [bpm, subdivision, volume]);
+  }, [bpm, subdivision, volume, beatsPerBar]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -37,7 +41,7 @@ export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCoun
     } else {
       metronomeRef.current?.stop();
     }
-  }, [isPlaying, bpm, subdivision]);
+  }, [isPlaying, bpm, subdivision, beatsPerBar]);
 
   const reset = useCallback(() => {
     metronomeRef.current?.reset();

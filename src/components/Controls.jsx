@@ -105,34 +105,38 @@ export function Controls({
         </Select>
       )}
 
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-text-secondary whitespace-nowrap">Time</span>
-        <Select value={timeSignatureId} onValueChange={onTimeSignatureChange}>
+      {typeId !== 'riffs' && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-text-secondary whitespace-nowrap">Time</span>
+          <Select value={timeSignatureId} onValueChange={onTimeSignatureChange}>
+            <SelectTrigger size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIME_SIGNATURES.map((ts) => (
+                <SelectItem key={ts.id} value={ts.id}>
+                  {ts.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {typeId !== 'riffs' && (
+        <Select value={String(subdivision)} onValueChange={(val) => onSubdivisionChange(Number(val))}>
           <SelectTrigger size="sm">
-            <SelectValue />
+            {subdivision === 3 ? <Tally3 size={14} /> : <SelectValue />}
           </SelectTrigger>
           <SelectContent>
-            {TIME_SIGNATURES.map((ts) => (
-              <SelectItem key={ts.id} value={ts.id}>
-                {ts.name}
+            {SUBDIVISIONS.map((sub) => (
+              <SelectItem key={sub.id} value={String(sub.id)}>
+                {sub.id === 3 ? <Tally3 size={16} /> : sub.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-      </div>
-
-      <Select value={String(subdivision)} onValueChange={(val) => onSubdivisionChange(Number(val))}>
-        <SelectTrigger size="sm">
-          {subdivision === 3 ? <Tally3 size={14} /> : <SelectValue />}
-        </SelectTrigger>
-        <SelectContent>
-          {SUBDIVISIONS.map((sub) => (
-            <SelectItem key={sub.id} value={String(sub.id)}>
-              {sub.id === 3 ? <Tally3 size={16} /> : sub.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      )}
 
       <div className="hidden flex items-center gap-2">
         <span className="text-xs text-text-secondary">Click</span>

@@ -2,26 +2,11 @@
  * Riff library — public API.
  */
 
-import { gallopRiff, alternatePickingRiff } from './gallops.js';
-import { jsonRiffs } from './riffsFromJson.js';
+import { demo44Riff, demo68Riff } from './demos.js';
 import { riffToTab } from '../../core/exercise/riffToTab.js';
 
 /** @type {import('./gallops.js').Riff[]} */
-export const RIFFS = [gallopRiff, alternatePickingRiff, ...jsonRiffs];
-
-/**
- * Pick n random riffs and concatenate their tabs.
- * Uses each riff's subdivisionsPerBeat when set, otherwise the passed subdivision.
- */
-export function getRandomMixTab(subdivisionsPerBeat, count = 3) {
-  const tabs = [];
-  for (let i = 0; i < count; i++) {
-    const riff = RIFFS[Math.floor(Math.random() * RIFFS.length)];
-    const subDiv = riff.subdivisionsPerBeat ?? subdivisionsPerBeat;
-    tabs.push(riffToTab(riff, subDiv));
-  }
-  return tabs.flat();
-}
+export const RIFFS = [demo44Riff, demo68Riff];
 
 /**
  * @param {string} id
@@ -31,4 +16,4 @@ export function getRiff(id) {
   return RIFFS.find((r) => r.id === id);
 }
 
-export { gallopRiff, alternatePickingRiff } from './gallops.js';
+export { demo44Riff, demo68Riff } from './demos.js';

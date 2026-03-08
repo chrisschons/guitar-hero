@@ -1,7 +1,7 @@
 // String labels (high to low)
 export const STRING_LABELS = ['e', 'B', 'G', 'D', 'A', 'E'];
 
-// Note subdivisions per beat (1–8 for freeform scroller)
+// Note subdivisions per beat (1–8 for freeform scroller; 12 for subdivision-demo riff)
 export const SUBDIVISIONS = [
   { id: 1, name: '♩', notesPerBeat: 1 },  // Quarter notes
   { id: 2, name: '♪', notesPerBeat: 2 },  // Eighth notes
@@ -11,6 +11,7 @@ export const SUBDIVISIONS = [
   { id: 6, name: '6', notesPerBeat: 6 },  // Sextuplets
   { id: 7, name: '7', notesPerBeat: 7 },  // Septuplets
   { id: 8, name: '8', notesPerBeat: 8 },  // 8 per beat
+  { id: 12, name: '12', notesPerBeat: 12 },  // For subdivision-demo (whole/8th/triplet/16th)
 ];
 
 // Time signatures for bar lines (and future count-in)
@@ -21,12 +22,22 @@ export const TIME_SIGNATURES = [
   { id: '12/8', name: '12/8', beatsPerMeasure: 6 }, // 6 dotted-quarter beats
 ];
 
-/** Slots (columns) per measure for bar line spacing */
+/** Number of metronome dots / beats per bar from time signature (numerator: 4/4→4, 6/8→6) */
+export function getBeatsPerBarForDots(timeSignatureId) {
+  const ts = TIME_SIGNATURES.find((t) => t.id === timeSignatureId);
+  if (!ts) return 4;
+  const num = parseInt(ts.id.split('/')[0], 10);
+  return Number.isFinite(num) ? num : 4;
+}
+
+/** Slots (columns) per measure for bar line spacing. Uses time signature numerator so 6/8 → 6, 4/4 → 4. */
 export function getSlotsPerMeasure(timeSignatureId, subdivision) {
   const ts = TIME_SIGNATURES.find((t) => t.id === timeSignatureId);
   const sub = Number(subdivision) || 2;
   if (!ts) return 4 * sub;
-  return ts.beatsPerMeasure * sub;
+  const num = parseInt(ts.id.split('/')[0], 10);
+  const pulsesPerBar = Number.isFinite(num) ? num : 4;
+  return pulsesPerBar * sub;
 }
 
 // Root notes with their fret position on low E string
@@ -169,7 +180,7 @@ export const EXERCISE_TYPES = [
   {
     id: 'riffs',
     name: 'Riffs',
-    exercises: [{ id: 'random-mix', name: 'Random mix' }, ...RIFFS.map((r) => ({ id: r.id, name: r.name }))],
+    exercises: RIFFS.map((r) => ({ id: r.id, name: r.name })),
     patterns: [{ id: 'default', name: 'Default' }],
   },
   {
@@ -192,7 +203,7 @@ export const SCALE_INTERVALS = {
 // Sourced from music engine / standard tuning for single source of truth
 import { STANDARD_TUNING } from '../data/tunings.js';
 import { getScale as getScaleFromEngine, getNoteAt } from '../core/music/index.js';
-import { RIFFS, getRiff, getRandomMixTab } from './riffs/index.js';
+import { RIFFS, getRiff } from './riffs/index.js';
 import { CHORD_PROGRESSIONS, generateChordProgressionTab } from './chordProgressions.js';
 import { riffToTab } from '../core/exercise/riffToTab.js';
 export const STRING_SEMITONES = STANDARD_TUNING;
@@ -530,13 +541,9 @@ export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision
   if (!type) return [];
 
   if (typeId === 'riffs') {
-    if (exerciseId === 'random-mix') {
-      return getRandomMixTab(subdivision, 3);
-    }
     const riff = getRiff(exerciseId);
     if (!riff) return [];
-    const subDiv = riff.subdivisionsPerBeat ?? subdivision;
-    return riffToTab(riff, subDiv);
+    return riffToTab(riff);
   }
 
   if (typeId === 'chord-progressions') {
