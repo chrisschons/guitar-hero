@@ -6,6 +6,7 @@ import App from './App.jsx'
 import { BravuraDemo } from './pages/BravuraDemo.jsx'
 import { Reference } from './pages/Reference.jsx'
 import { Tuner } from './pages/Tuner.jsx'
+import { Editor } from './pages/Editor.jsx'
 
 applyTheme(defaultTheme)
 
@@ -28,6 +29,10 @@ function Router() {
 
   if (route === '#/tuner') {
     return <Tuner />;
+  }
+
+  if (route === '#/editor') {
+    return <Editor />;
   }
 
   return <App />;

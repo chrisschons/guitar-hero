@@ -62,6 +62,14 @@ export function createExerciseEngine() {
     state.tickIndex = -1;
   }
 
+  /** Set tick index (e.g. after user drags scroll). Clamps to [0, loopTicks - 1]. */
+  function seek(tickIndex) {
+    const loopTicks = getLoopTicks();
+    if (loopTicks > 0) {
+      state.tickIndex = Math.max(0, Math.min(loopTicks - 1, Math.floor(tickIndex)));
+    }
+  }
+
   function setLoop(loop) {
     state.loop = !!loop;
   }
@@ -74,6 +82,7 @@ export function createExerciseEngine() {
     onTick,
     setTab,
     reset,
+    seek,
     setLoop,
   };
 }

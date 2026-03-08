@@ -11,7 +11,7 @@ import { useNoteTones } from './hooks/useNoteTones';
 import { useExercise } from './hooks/useExercise';
 import { EXERCISE_TYPES, SUBDIVISIONS, getVisualizationData, getSlotsPerMeasure } from './data/exerciseTypes';
 import { TUNINGS, STANDARD_TUNING } from './data/tunings';
-import { getRiff } from './data/riffs';
+import { getRiff, getMergedRiffList } from './data/riffs';
 
 function App() {
   // Playback state (not persisted)
@@ -75,7 +75,7 @@ function App() {
 
   // Get current type and its exercises/patterns
   const currentType = EXERCISE_TYPES.find(t => t.id === typeId);
-  const exercises = currentType?.exercises || [];
+  const exercises = typeId === 'riffs' ? getMergedRiffList() : (currentType?.exercises || []);
   const patterns = currentType?.patterns || [];
   
   // Get visualization data
@@ -306,6 +306,12 @@ function App() {
               className="text-xs text-accent hover:text-accent-light transition-colors"
             >
               Tuner
+            </a>
+            <a
+              href="#/editor"
+              className="text-xs text-accent hover:text-accent-light transition-colors"
+            >
+              Riff Editor
             </a>
             <a
               href="#/bravura-demo"
