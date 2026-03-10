@@ -1,8 +1,10 @@
 import { STANDARD_TUNING } from '../data/tunings';
-import { getNoteAt, getScale, SCALE_INTERVALS, ROOT_SEMITONES, isRootNote, getStringLabels } from '../core/music';
+import { getNoteAt, getNoteName, getScale, SCALE_INTERVALS, ROOT_SEMITONES, isRootNote, getStringLabels } from '../core/music';
 
 // Full fretboard range to display
 const FRET_RANGE = Array.from({ length: 24 }, (_, i) => i);
+// Frets that have marker dots on the neck (bold note labels)
+const FRET_DOTS = [3, 5, 7, 9, 12, 15, 17];
 
 // Get all frets for a given string, root, scale type, and tuning
 function getScaleFrets(stringIndex, rootSemitone, scaleType, tuning) {
@@ -96,7 +98,11 @@ function getPowerChordFrets(rootFret, exerciseId) {
   return frets;
 }
 
-export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', tuning = STANDARD_TUNING }) {
+export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', tuning = STANDARD_TUNING, showFretNotes = false }) {
+  // #region agent log
+  const tuningSnap = tuning?.join?.('-') ?? 'no-tuning';
+  fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'FretboardDiagram.jsx:render',message:'Fretboard render',data:{vizType:vizData?.type,tuningSnapshot:tuningSnap,offset:vizData?.offset,positionNotesLen:vizData?.positionNotes?.length},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+  // #endregion
   const { type, rootFret = 0, exerciseId = '', positionIndex = 0, offset = 0, exerciseNotes = [], positionNotes = [], scaleType = 'pentatonic' } = vizData || {};
 
   const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9; // Default to A
@@ -213,7 +219,9 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
                                 ? isRoot
                                   ? 'bg-bg-secondary border-2 border-accent'
                                   : 'bg-accent'
-                                : 'bg-slate-700'
+                                : isRoot
+                                  ? 'bg-bg-secondary border-2 border-slate-700'
+                                  : 'bg-slate-700'
                             }
                           `}
                         />
@@ -227,7 +235,7 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
             {/* Fret markers (dots) */}
             <div className="absolute inset-0 flex pointer-events-none">
               {FRET_RANGE.map((fret) => {
-                const showDot = [3, 5, 7, 9, 12, 15, 17].includes(fret);
+                const showDot = FRET_DOTS.includes(fret);
                 const isDoubleDot = fret === 12;
                 
                 return (
@@ -246,6 +254,26 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
               })}
             </div>
           </div>
+
+          {/* Note labels under each fret column (low E string); bold on dot frets */}
+          {showFretNotes && (
+          <div className="flex mt-1">
+            {FRET_RANGE.map((fret) => {
+              const noteSemitone = getNoteAt(5, fret, tuning);
+              const noteName = getNoteName(noteSemitone);
+              const isDotFret = FRET_DOTS.includes(fret);
+              return (
+                <div
+                  key={fret}
+                  className={`flex-1 text-center text-[10px] text-text-secondary ${isDotFret ? 'font-bold text-text-primary' : ''}`}
+                  style={{ minWidth: 36 }}
+                >
+                  {noteName}
+                </div>
+              );
+            })}
+          </div>
+          )}
         </div>
       </div>
     </div>

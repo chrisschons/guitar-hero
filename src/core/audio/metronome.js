@@ -1,12 +1,15 @@
 /**
  * Metronome: schedule click sounds and callbacks at BPM/subdivision rate.
  * Uses getAudioContext() for a single shared context.
+ * Clicks are scheduled at precise AudioContext.currentTime for accurate timing (lookahead).
  */
 
 import { getAudioContext } from './audioContext.js';
 
+const LOOKAHEAD_SEC = 0.2; // Schedule clicks up to 200ms ahead
+
 /**
- * Play a single click (sine, short envelope).
+ * Play a single click (sine, short envelope) at a precise context time.
  * @param {AudioContext} ctx
  * @param {number} frequency - Hz
  * @param {number} gainValue - 0–1
@@ -19,6 +22,7 @@ function playClickAt(ctx, frequency, gainValue, when) {
   gain.connect(ctx.destination);
   osc.frequency.value = frequency;
   osc.type = 'sine';
+  gain.gain.setValueAtTime(0, when);
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + 0.1);
   osc.start(when);
@@ -33,6 +37,7 @@ function playClickAt(ctx, frequency, gainValue, when) {
  * @param {number} options.bpm
  * @param {number} options.subdivision - notes per beat (1–8)
  * @param {number} [options.beatsPerBar=4] - beats per bar (from time signature, e.g. 4 for 4/4, 6 for 6/8)
+ * @param {number} [options.countInBeats] - count-in beats before first tick; 0 = no count-in (default: beatsPerBar)
  * @param {number} [options.volume=0.3] - click volume 0–1
  * @param { (beat: number) => void } [options.onBeat]
  * @param { (tick: number) => void } [options.onTick]
@@ -41,13 +46,14 @@ function playClickAt(ctx, frequency, gainValue, when) {
 export function createMetronome(options) {
   const { bpm, subdivision, volume = 0.3, onBeat, onTick, onCountIn } = options;
   const beatsPerBar = Math.max(1, Number(options.beatsPerBar) || 4);
+  const countInBeats = Number(options.countInBeats) ?? beatsPerBar;
   const maxGain = 0.5;
   const effectiveVolume = Math.min(1, volume) * maxGain;
 
   let nextNoteTime = 0;
   let currentBeat = 0;
   let currentTick = 0;
-  let countIn = 0;
+  let countIn = countInBeats > 0 ? 0 : beatsPerBar; // skip count-in when 0
   let timerId = null;
 
   const secondsPerBeat = 60.0 / bpm;
@@ -57,40 +63,37 @@ export function createMetronome(options) {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
 
-    while (nextNoteTime < now + 0.1) {
-      const countInBeats = beatsPerBar;
-      const isCountingIn = countIn < countInBeats;
-      const delayMs = (nextNoteTime - now) * 1000;
+    while (nextNoteTime < now + LOOKAHEAD_SEC) {
+      const isCountingIn = countInBeats > 0 && countIn < countInBeats;
 
       if (isCountingIn) {
         const countValue = countInBeats - countIn;
         countIn += 1;
-        setTimeout(() => {
-          const c = getAudioContext();
-          const countInGain = effectiveVolume > 0 ? effectiveVolume : 0.25;
-          playClickAt(c, 1200, countInGain, c.currentTime);
-          onCountIn?.(countValue);
-        }, Math.max(0, delayMs));
-        nextNoteTime += secondsPerBeat;
-        // Do not advance currentBeat or call onBeat during count-in; first real beat will be 0
-      } else {
-        // Metronome ticks on beats only: play click and report beat
-        const beatForCallback = currentBeat;
+        const when = nextNoteTime;
         if (effectiveVolume > 0) {
-          setTimeout(() => {
-            const c = getAudioContext();
-            const freq = beatForCallback === 0 ? 1000 : 800;
-            const gain = beatForCallback === 0 ? effectiveVolume : effectiveVolume * 0.4;
-            playClickAt(c, freq, gain, c.currentTime);
-          }, Math.max(0, delayMs));
+          playClickAt(ctx, 1200, effectiveVolume, when);
+        } else {
+          playClickAt(ctx, 1200, 0.25, when);
         }
-        setTimeout(() => onBeat?.(beatForCallback), Math.max(0, delayMs));
+        const delayMs = (when - now) * 1000;
+        if (delayMs >= 0) setTimeout(() => onCountIn?.(countValue), delayMs);
+        nextNoteTime += secondsPerBeat;
+      } else {
+        const beatForCallback = currentBeat;
+        const when = nextNoteTime;
+        if (effectiveVolume > 0) {
+          const freq = beatForCallback === 0 ? 1000 : 800;
+          const gain = beatForCallback === 0 ? effectiveVolume : effectiveVolume * 0.4;
+          playClickAt(ctx, freq, gain, when);
+        }
+        const delayMs = (when - now) * 1000;
+        if (delayMs >= 0) setTimeout(() => onBeat?.(beatForCallback), delayMs);
 
-        // Fire onTick at subdivision rate within this beat so the exercise advances correctly
         for (let sub = 0; sub < subdivision; sub++) {
-          const subDelayMs = (nextNoteTime + sub * secondsPerNote - now) * 1000;
+          const subWhen = nextNoteTime + sub * secondsPerNote;
+          const subDelayMs = (subWhen - now) * 1000;
           const tickForCallback = currentTick + sub;
-          setTimeout(() => onTick?.(tickForCallback), Math.max(0, subDelayMs));
+          if (subDelayMs >= 0) setTimeout(() => onTick?.(tickForCallback), subDelayMs);
         }
 
         nextNoteTime += secondsPerBeat;

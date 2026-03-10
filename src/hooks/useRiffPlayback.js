@@ -1,25 +1,24 @@
 import { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import { createExerciseEngine } from '../core/exercise';
+import { createExerciseEngine, getSubdivisionsPerBar } from '../core/exercise';
 import { riffToTab } from '../core/exercise/riffToTab';
 
-const BARS = 8;
+const DEFAULT_BARS = 8;
 
 /**
  * Playback for a single riff object (e.g. editor state). Uses same engine as useExercise.
- * Tab is padded to BARS so loop is exactly 8 bars.
+ * Tab is padded to the requested number of bars so the loop is an exact bar length.
  * @param {import('../data/riffs/gallops.js').Riff} riff
+ * @param {number} [bars]
  * @returns {{ tab: (number|null)[][], activeNoteIndex: number, onTick: () => void, reset: () => void, getCurrentColumn: () => (number|null)[]|null, getActiveNoteIndex: () => number, loopTicks: number }}
  */
-export function useRiffPlayback(riff) {
+export function useRiffPlayback(riff, bars = DEFAULT_BARS) {
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createExerciseEngine();
   const engine = engineRef.current;
 
   const [, setTick] = useState(0);
-  const beatsPerBar = riff?.timeSignature?.num ?? 4;
-  const subdivisionsPerBeat = riff?.subdivisionsPerBeat ?? 2;
-  const subdivisionsPerBar = beatsPerBar * subdivisionsPerBeat;
-  const targetColumns = BARS * subdivisionsPerBar;
+  const subdivisionsPerBar = riff?.timeSignature ? getSubdivisionsPerBar(riff.timeSignature) : 16;
+  const targetColumns = bars * subdivisionsPerBar;
 
   const tab = useMemo(() => {
     if (!riff?.notes) return [];

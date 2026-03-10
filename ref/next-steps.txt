@@ -1,20 +1,5 @@
-there are some issues with our chord diagram display logic, i'd like to adjust the arrays to simplify things 
-
-- chord box should be fixed size with 5 columns
-- column 0: mute notes and open notes
-- if column one = fret 1, display the thick left border for the nut
-- fret array should be relative to startFret:
-E major [0,0,2,3,3,0], startFret = 0 (default, prop not needed)
-B major [0,2,2,2,0,-1], startFret = 2
-
-- optional barre property to define for ui, example f chord, barre is fret 1, string 1-6 , property would be barre:[1,1,6]
 
 
-refactor
-
-- all note visualizations should be based on math, not arrays of specific notes
-- major scale pattern: w w h w w w h, minor w h w w h w w
-- chords can stay roughly same, just clearer rules for the chord diagrams so they display properly
 
 
 features
@@ -27,3 +12,66 @@ features
 - chord changing exercises
 - ideally i'd like 
 - tuner, can we do that with mic access?
+
+
+fixes
+- one dropdown for scales
+- separate scale and chords pages
+- barre chord issues
+- optional barre property to define for ui, example f chord, barre is fret 1, string 1-6 , property would be barre:[1,1,6]
+- change keys - scroller string notes are adding additional notes, scales are not showing correect active notes
+- scale positions should alwasy show 5 frets
+- add all notes in key select in main app
+- hide power chords abd chord progressions
+- metronome drawing over the toolbar
+- dark color behind note to hide string line
+
+
+click volume 
+larger size for tabs,in between tabs and scroller sizes
+scrolling in editor feels choppy
+
+scales - 3nps tab and active notes are off - tabs show -1 0 2, should be 0 2 4
+
+
+features to do
+notes under fretboard
+
+notes and bars under tabs (standard)
+up down under tabs
+1 & 2 & 3 e & a   4
+
+
+
+
+
+Editor ideas
+Need file format, easily download shared, imported
+Riff should have starting key
+Fixed time signature
+No note changes
+Group of riffs for random mode, play one x amount of times, queue up the next one visually before switching
+Editor can be simple 16th note max , on off nothing fancier
+Maybe a way to denote power chord, maybe full chords
+Need that notation where a measure repeats a pattern
+Up down support
+Notation under tabs
+
+
+Shift click to select range grid
+Right click context me u
+Delet clears selection or grid
+Paste replaces notes relative to selection grid 
+Ok if notes get cout off top or bottom
+
+View by note subdivision and bar
+Subdivision view determines note length
+
+Link notes for sustained longer notes
+
+Linked notes could be how we create tripelets sextuplets
+Split option goes back to even
+
+Bar mode drag to reorder, duplicate delete
+
+paste in standard ascii tabs topopulate riff

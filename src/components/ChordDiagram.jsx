@@ -19,11 +19,21 @@ export function ChordDiagram({ chord, title = '', chordType = '', tuning = STAND
   // Column 0 has no left border (never draw vertical line at i=0)
   const skipLineBeforeCol0 = true;
 
-  // Barre: from chord.barre [colIndex, fromString, toString] or legacy detection
-  const barreCol1 =
-    barre && barre.length >= 3
-      ? { colIndex: barre[0], top: barre[1], bottom: barre[2] }
-      : null;
+  // Barre: supports [fret, startString, endString] 1-based (e.g. [1, 1, 6]) or legacy [colIndex, fromString, toString] 0-based
+  const barreCol1 = (() => {
+    if (!barre || barre.length < 3) return null;
+    const a = barre[0];
+    const b = barre[1];
+    const c = barre[2];
+    // 1-based: fret 1–24, startString/endString 1–6 (1 = high e, 6 = low E)
+    const isOneBased = b >= 1 && b <= 6 && c >= 1 && c <= 6 && b <= c && a >= 1 && a <= 24;
+    if (isOneBased) {
+      const colIndex = firstFret >= 1 ? a - firstFret + 1 : a;
+      if (colIndex < 0 || colIndex > NUM_COLUMNS - 1) return null;
+      return { colIndex, top: b - 1, bottom: c - 1 };
+    }
+    return { colIndex: a, top: b, bottom: c };
+  })();
 
   return (
     <div className="bg-bg-secondary rounded-lg p-3 border border-bg-tertiary inline-block">
@@ -52,12 +62,12 @@ export function ChordDiagram({ chord, title = '', chordType = '', tuning = STAND
           })}
           {barreCol1 && (
             <div
-              className="absolute pointer-events-none bg-accent z-[5]"
+              className="absolute pointer-events-none bg-accent z-6 rounded-sm"
               style={{
                 left: barreCol1.colIndex * cellWidth + cellWidth / 2 - 2,
                 width: 4,
                 top: fretRowHeight + barreCol1.top * stringRowHeight + stringRowHeight / 2 - 2,
-                height: (barreCol1.bottom - barreCol1.top) * stringRowHeight + 4,
+                height: Math.max(4, (barreCol1.bottom - barreCol1.top) * stringRowHeight + 4),
               }}
             />
           )}

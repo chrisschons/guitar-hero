@@ -16,10 +16,16 @@ export function useExercise(typeId, exerciseId, patternId, rootNote, subdivision
 
   const [, setTick] = useState(0);
 
-  const tab = useMemo(
-    () => generateTab(typeId, exerciseId, patternId, rootNote, subdivision),
-    [typeId, exerciseId, patternId, rootNote, subdivision]
-  );
+  const tab = useMemo(() => {
+    const result = generateTab(typeId, exerciseId, patternId, rootNote, subdivision);
+    // #region agent log
+    if (result?.length && typeId === 'major-3nps' && typeof fetch !== 'undefined') {
+      const firstThreeLowE = result.slice(0, 3).map((col) => (col && col[5]) ?? null);
+      fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'useExercise.js:tab useMemo',message:'Tab generated (no tuning in deps)',data:{typeId,rootNote,firstThreeLowE},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    }
+    // #endregion
+    return result;
+  }, [typeId, exerciseId, patternId, rootNote, subdivision]);
 
   useEffect(() => {
     engine.setTab(tab, ticksPerBar);

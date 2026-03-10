@@ -15,7 +15,14 @@ const STATIC_ROW_HEIGHT = 72;
 const STATIC_STRING_HEIGHT = 12;
 const STATIC_ROW_GAP = 40;
 
-export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBeat, countIn, activeNoteIndex, subdivision = 2, timeSignatureId = '4/4', notesPerMeasureOverride = null, loopTicks = 0, tuning = STANDARD_TUNING }) {
+export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBeat, countIn, activeNoteIndex, subdivision = 2, timeSignatureId = '4/4', notesPerMeasureOverride = null, loopTicks = 0, tuning = STANDARD_TUNING, showBeatIndicator = true }) {
+  // #region agent log
+  const tuningId = tuning?.join?.('-') ?? 'no-tuning';
+  if (tab?.length && (tab.length <= 5 || tab[0])) {
+    const firstCol = tab[0]?.map((f) => f ?? 'n')?.join(',');
+    fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'TabDisplay.jsx:render',message:'TabDisplay render',data:{tabLength:tab.length,tuningSnapshot:tuningId,firstColumn:firstCol,firstThreeCols:tab.slice(0,3).map(c=>c?.[5])},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  }
+  // #endregion
   const stringLabels = getStringLabels(tuning);
   const subDiv = Number(subdivision) || 2;
   const notesPerMeasure = notesPerMeasureOverride ?? getSlotsPerMeasure(timeSignatureId, subDiv);
@@ -68,6 +75,7 @@ export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBea
   return (
     <div className="relative bg-bg-secondary pt-10 pb-6 pl-14 pr-6 overflow-hidden">
       {/* Beat indicator */}
+      {showBeatIndicator && (
       <div className="absolute top-2 left-0 right-0 flex justify-center items-center h-6 z-20">
         <div className="flex gap-2">
           {Array.from({ length: beatsPerBarDots }, (_, beat) => beat).map((beat) => {
@@ -96,6 +104,7 @@ export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBea
           })}
         </div>
       </div>
+      )}
 
       {/* Playhead: fixed in scroll mode, moving in static mode (wrapped: one per row position) */}
       {scrollMode ? (

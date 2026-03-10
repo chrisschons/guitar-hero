@@ -1,10 +1,16 @@
-import { Tally3, Guitar } from 'lucide-react';
-import { ROOT_NOTES, EXERCISE_TYPES, SUBDIVISIONS, TIME_SIGNATURES } from '../data/exerciseTypes';
+import { Tally3, Guitar, Palette } from 'lucide-react';
+import { EXERCISE_TYPES, SUBDIVISIONS, TIME_SIGNATURES } from '../data/exerciseTypes';
 import { TUNINGS_LIST } from '../data/tunings';
-import { getStringLabels } from '../core/music';
+import { getStringLabels, NOTE_NAMES } from '../core/music';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
+
+const THEME_OPTIONS = [
+  { id: 'default', label: 'Default' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+];
 
 export function Controls({
   rootNote,
@@ -31,10 +37,18 @@ export function Controls({
   tabScrollMode,
   onTabScrollModeChange,
   showFretboard,
-  onShowFretboardChange
+  onShowFretboardChange,
+  themeId,
+  onThemeChange,
+  countInEnabled,
+  onCountInEnabledChange,
+  showFretNotes,
+  onShowFretNotesChange
 }) {
   return (
-    <div className="flex flex-wrap gap-3 justify-center items-center p-3">
+    <div className="flex flex-wrap gap-3 justify-between items-center p-3">
+      {/* Left: tuning, root, type, exercise, pattern, time, subdivision */}
+      <div className="flex flex-wrap gap-3 items-center">
       <Select value={tuningId} onValueChange={onTuningChange}>
         <SelectTrigger size="sm" className="w-8 h-6 justify-center px-1.5" title={TUNINGS_LIST.find((t) => t.id === tuningId)?.name ?? 'Tuning'}>
           <Guitar className="h-4 w-4 shrink-0" />
@@ -56,9 +70,9 @@ export function Controls({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {ROOT_NOTES.map((root) => (
-            <SelectItem key={root.id} value={root.id}>
-              {root.id}
+          {NOTE_NAMES.map((name) => (
+            <SelectItem key={name} value={name}>
+              {name}
             </SelectItem>
           ))}
         </SelectContent>
@@ -107,7 +121,6 @@ export function Controls({
 
       {typeId !== 'riffs' && (
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-text-secondary whitespace-nowrap">Time</span>
           <Select value={timeSignatureId} onValueChange={onTimeSignatureChange}>
             <SelectTrigger size="sm">
               <SelectValue />
@@ -149,8 +162,12 @@ export function Controls({
           className="w-[60px]"
         />
       </div>
+      </div>
 
+      {/* Right: Scroll, Fretboard, Count-in, Theme */}
+      <div className="flex flex-wrap gap-3 items-center">
       <div className="flex items-center gap-2">
+        {/*}
         <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
           <Switch checked={tabScrollMode} onCheckedChange={onTabScrollModeChange} />
           <span>Scroll</span>
@@ -159,6 +176,30 @@ export function Controls({
           <Switch checked={showFretboard} onCheckedChange={onShowFretboardChange} />
           <span>Fretboard</span>
         </label>
+        */}
+        <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+          <Switch checked={countInEnabled} onCheckedChange={onCountInEnabledChange} />
+          <span>Count-in</span>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+          <Switch checked={showFretNotes} onCheckedChange={onShowFretNotesChange} />
+          <span>Note labels</span>
+        </label>
+      </div>
+{/*}
+      <Select value={themeId} onValueChange={onThemeChange}>
+        <SelectTrigger size="sm" className="w-8 h-6 justify-center px-1.5" title="Theme">
+          <Palette className="h-4 w-4 shrink-0" />
+        </SelectTrigger>
+        <SelectContent>
+          {THEME_OPTIONS.map((opt) => (
+            <SelectItem key={opt.id} value={opt.id}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      */}
       </div>
     </div>
   );

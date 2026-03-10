@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Play, Pause, ArrowLeftToLine, Metronome } from 'lucide-react';
+import { Play, Pause, ArrowLeftToLine, Metronome, RotateCcw } from 'lucide-react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Controls } from './components/Controls';
 import { TabDisplay, COLUMN_WIDTH, INITIAL_SCROLL } from './components/TabDisplay';
@@ -12,6 +12,8 @@ import { useExercise } from './hooks/useExercise';
 import { EXERCISE_TYPES, SUBDIVISIONS, getVisualizationData, getSlotsPerMeasure } from './data/exerciseTypes';
 import { TUNINGS, STANDARD_TUNING } from './data/tunings';
 import { getRiff, getMergedRiffList } from './data/riffs';
+import { getSubdivisionsPerBar, getSubdivisionsPerBeat } from './core/exercise';
+import { applyTheme, THEMES, persistThemeId } from './theme';
 
 function App() {
   // Playback state (not persisted)
@@ -32,6 +34,9 @@ function App() {
   const [showFretboard, setShowFretboard] = useLocalStorage('guitar-hero-show-fretboard', true);
   const [tuningId, setTuningId] = useLocalStorage('guitar-hero-tuning', 'standard');
   const [timeSignatureId, setTimeSignatureId] = useLocalStorage('guitar-hero-time-signature', '4/4');
+  const [themeId, setThemeId] = useLocalStorage('guitar-hero-theme-id', 'default');
+  const [countInEnabled, setCountInEnabled] = useLocalStorage('guitar-hero-count-in', true);
+  const [showFretNotes, setShowFretNotes] = useLocalStorage('guitar-hero-show-fret-notes', false);
 
   const tuning = TUNINGS[tuningId]?.semitones ?? STANDARD_TUNING;
 
@@ -46,23 +51,21 @@ function App() {
     return timeSignatureId;
   }, [typeId, exerciseId, timeSignatureId]);
 
-  // For riffs, notes per measure = columns per bar from the riff (so bar lines match); otherwise from time sig + subdivision
+  // For riffs, notes per measure = subdivisions per bar (16th-note grid from time sig)
   const notesPerMeasureOverride = useMemo(() => {
     if (typeId === 'riffs') {
       const riff = getRiff(exerciseId);
-      if (riff?.timeSignature) {
-        const sub = riff.subdivisionsPerBeat ?? 2;
-        return riff.timeSignature.num * sub;
-      }
+      if (riff?.timeSignature) return getSubdivisionsPerBar(riff.timeSignature);
     }
     return null;
   }, [typeId, exerciseId]);
 
-  // For riffs, use the riff's subdivisionsPerBeat so metronome and scroll advance at subdivision rate (e.g. 8 ticks/bar for 4/4 with 2)
+  // For riffs, subdivisions per beat from time sig (4/4→4, 6/8→8)
   const effectiveSubdivision = useMemo(() => {
     if (typeId === 'riffs') {
       const riff = getRiff(exerciseId);
-      return riff?.subdivisionsPerBeat ?? 2;
+      if (riff?.timeSignature) return getSubdivisionsPerBeat(riff.timeSignature);
+      return 4;
     }
     return subdivision;
   }, [typeId, exerciseId, subdivision]);
@@ -117,7 +120,7 @@ function App() {
     if (column) playColumn(column);
   }, [exerciseOnTick, getActiveNoteIndex, getCurrentColumn, playColumn]);
 
-  const { reset: resetMetronome } = useMetronome(bpm, effectiveSubdivision, isPlaying, handleBeat, handleTick, handleCountIn, metronomeVolume, effectiveTimeSignatureId);
+  const { reset: resetMetronome } = useMetronome(bpm, effectiveSubdivision, isPlaying, handleBeat, handleTick, handleCountIn, metronomeVolume, effectiveTimeSignatureId, countInEnabled ? undefined : 0);
 
   const handleAnimationFrame = useCallback((deltaTime) => {
     if (activeNoteIndex < 0) return;
@@ -182,6 +185,9 @@ function App() {
   };
 
   const handleTuningChange = (id) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'App.jsx:handleTuningChange',message:'Tuning change',data:{tuningId:id,tabLength:tab?.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     handleReset();
     setTuningId(id);
   };
@@ -199,6 +205,32 @@ function App() {
     handleReset();
     setSubdivision(newSub);
     setScrollPosition(INITIAL_SCROLL);
+  };
+
+  const handleThemeChange = (id) => {
+    const theme = THEMES[id];
+    if (theme) {
+      applyTheme(theme);
+      persistThemeId(id);
+      setThemeId(id);
+    }
+  };
+
+  const handleResetAllToDefaults = () => {
+    handleReset();
+    setBpm(120);
+    setSubdivision(2);
+    setMetronomeVolume(0);
+    setRootNote('A');
+    setTypeId('pentatonic');
+    setExerciseId('pos1');
+    setPatternId('up-down');
+    setTabScrollMode(false);
+    setShowFretboard(true);
+    setCountInEnabled(true);
+    setShowFretNotes(false);
+    setTuningId('standard');
+    setTimeSignatureId('4/4');
   };
 
   useEffect(() => {
@@ -243,6 +275,12 @@ function App() {
           onTabScrollModeChange={setTabScrollMode}
           showFretboard={showFretboard}
           onShowFretboardChange={setShowFretboard}
+          themeId={themeId}
+          onThemeChange={handleThemeChange}
+          countInEnabled={countInEnabled}
+          onCountInEnabledChange={setCountInEnabled}
+          showFretNotes={showFretNotes}
+          onShowFretNotesChange={setShowFretNotes}
         />
       </div>
 
@@ -262,7 +300,7 @@ function App() {
           />
 
         <div className="max-w-[1200px] mx-auto px-5 mt-6 flex-1 flex flex-col">
-          {showFretboard && <FretboardDiagram vizData={vizData} currentNotes={currentNotes} rootNote={rootNote} tuning={tuning} />}
+          {showFretboard && <FretboardDiagram vizData={vizData} currentNotes={currentNotes} rootNote={rootNote} tuning={tuning} showFretNotes={showFretNotes} />}
 
           {/* Play, Reset, and BPM in one line */}
           <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
@@ -294,19 +332,21 @@ function App() {
             </div>
           </div>
 
-          <footer className="mt-auto pt-12 pb-6 text-center space-x-4">
+          <footer className="mt-auto pt-12 pb-6 text-center flex flex-wrap items-center justify-center gap-4">
             <a
               href="#/reference"
               className="text-xs text-accent hover:text-accent-light transition-colors"
             >
               Scale Reference
             </a>
+            {/*
             <a
               href="#/tuner"
               className="text-xs text-accent hover:text-accent-light transition-colors"
             >
               Tuner
             </a>
+            */}
             <a
               href="#/editor"
               className="text-xs text-accent hover:text-accent-light transition-colors"
@@ -319,6 +359,15 @@ function App() {
             >
               Bravura / SMuFL Demo
             </a>
+            <button
+              type="button"
+              onClick={handleResetAllToDefaults}
+              className="inline-flex items-center justify-center p-1.5 rounded text-text-secondary hover:text-accent hover:bg-bg-tertiary transition-colors"
+              title="Reset all settings to default"
+              aria-label="Reset all settings to default"
+            >
+              <RotateCcw size={14} />
+            </button>
           </footer>
         </div>
       </div>

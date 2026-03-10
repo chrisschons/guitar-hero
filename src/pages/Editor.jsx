@@ -6,13 +6,15 @@ import { useMetronome } from '../hooks/useMetronome';
 import { useAnimationLoop } from '../hooks/useAnimationLoop';
 import { useNoteTones } from '../hooks/useNoteTones';
 import { useRiffPlayback } from '../hooks/useRiffPlayback';
+import { getSubdivisionsPerBar, getSubdivisionsPerBeat } from '../core/exercise';
 import { getRiff, getMergedRiffList } from '../data/riffs';
 import { saveUserRiff, nextUserRiffId } from '../data/riffs/userRiffsStorage';
 import { TIME_SIGNATURES } from '../data/exerciseTypes';
 import { TUNINGS, STANDARD_TUNING } from '../data/tunings';
 import { getStringLabels } from '../core/music';
 
-const BARS = 8;
+// Available bar counts for the editor grid/loop
+const BAR_OPTIONS = [2, 4, 6, 8, 12];
 
 /** @typedef {import('../data/riffs/gallops.js').Riff} Riff */
 
@@ -23,21 +25,18 @@ function defaultRiff(id, name = 'New riff') {
     timeSignature: { num: 4, denom: 4 },
     bpmRange: { min: 60, max: 120 },
     style: 'user',
-    subdivisionsPerBeat: 2,
     notes: [],
   };
 }
 
-function notesToGrid(riff) {
-  const num = riff.timeSignature?.num ?? 4;
-  const sub = riff.subdivisionsPerBeat ?? 2;
-  const subsPerBar = num * sub;
-  const totalSlots = BARS * subsPerBar;
+function notesToGrid(riff, bars) {
+  const subsPerBar = riff.timeSignature ? getSubdivisionsPerBar(riff.timeSignature) : 16;
+  const totalSlots = bars * subsPerBar;
   /** @type {(number | null)[][]} */
   const grid = Array.from({ length: 6 }, () => Array(totalSlots).fill(null));
   for (const n of riff.notes || []) {
     const s = Math.max(0, Math.min(5, n.string - 1));
-    const bar = n.bar >= 1 && n.bar <= BARS ? n.bar : 1;
+    const bar = n.bar >= 1 && n.bar <= bars ? n.bar : 1;
     const subdiv = n.subdivision >= 1 && n.subdivision <= subsPerBar ? n.subdivision : 1;
     const slot = (bar - 1) * subsPerBar + (subdiv - 1);
     if (slot >= 0 && slot < totalSlots) grid[s][slot] = n.fret;
@@ -46,9 +45,7 @@ function notesToGrid(riff) {
 }
 
 function gridToNotes(riff, grid) {
-  const num = riff.timeSignature?.num ?? 4;
-  const sub = riff.subdivisionsPerBeat ?? 2;
-  const subsPerBar = num * sub;
+  const subsPerBar = riff.timeSignature ? getSubdivisionsPerBar(riff.timeSignature) : 16;
   /** @type {Riff['notes']} */
   const notes = [];
   for (let s = 0; s < 6; s++) {
@@ -69,6 +66,7 @@ export function Editor() {
   const list = getMergedRiffList();
   const [riffId, setRiffId] = useState(list[0]?.id ?? '');
   const [riff, setRiffState] = useState(/** @type {Riff | null} */ (null));
+  const [bars, setBars] = useState(8);
   const [bpm, setBpm] = useState(100);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentBeat, setCurrentBeat] = useState(-1);
@@ -104,9 +102,9 @@ export function Editor() {
     if (riff) saveUserRiff(riff);
   }, [riff]);
 
-  const subsPerBar = riff ? (riff.timeSignature?.num ?? 4) * (riff.subdivisionsPerBeat ?? 2) : 8;
-  const totalColumns = BARS * subsPerBar;
-  const grid = useMemo(() => (riff ? notesToGrid(riff) : []), [riff]);
+  const subsPerBar = riff && riff.timeSignature ? getSubdivisionsPerBar(riff.timeSignature) : 16;
+  const totalColumns = bars * subsPerBar;
+  const grid = useMemo(() => (riff ? notesToGrid(riff, bars) : []), [riff, bars]);
 
   const updateCell = useCallback(
     (stringIndex, slotIndex, value) => {
@@ -131,7 +129,7 @@ export function Editor() {
   const timeSignatureId = riff
     ? `${riff.timeSignature?.num ?? 4}/${riff.timeSignature?.denom ?? 4}`
     : '4/4';
-  const effectiveSubdivision = riff?.subdivisionsPerBeat ?? 2;
+  const effectiveSubdivision = riff?.timeSignature ? getSubdivisionsPerBeat(riff.timeSignature) : 4;
   const notesPerMeasureOverride = subsPerBar;
 
   const {
@@ -143,7 +141,7 @@ export function Editor() {
     getCurrentColumn,
     getActiveNoteIndex,
     loopTicks,
-  } = useRiffPlayback(riff ?? undefined);
+  } = useRiffPlayback(riff ?? undefined, bars);
 
   const scrollMax = INITIAL_SCROLL + (loopTicks > 0 ? loopTicks : totalColumns) * COLUMN_WIDTH;
 
@@ -199,8 +197,9 @@ export function Editor() {
     handleBeat,
     handleTick,
     handleCountIn,
-    0.3,
-    timeSignatureId
+    0,
+    timeSignatureId,
+    0
   );
 
   const handleAnimationFrame = useCallback(
@@ -317,15 +316,15 @@ export function Editor() {
           </select>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-text-secondary">Sub/beat</span>
+          <span className="text-text-secondary">Bars</span>
           <select
-            value={effectiveSubdivision}
-            onChange={(e) => setRiff({ ...riff, subdivisionsPerBeat: Number(e.target.value) })}
+            value={bars}
+            onChange={(e) => setBars(Number(e.target.value) || 2)}
             className="bg-bg-tertiary border rounded px-2 py-1"
           >
-            {[1, 2, 3, 4].map((n) => (
-              <option key={n} value={n}>
-                {n}
+            {BAR_OPTIONS.map((b) => (
+              <option key={b} value={b}>
+                {b}
               </option>
             ))}
           </select>
@@ -368,7 +367,6 @@ export function Editor() {
 
       <div className="flex-1 flex flex-col p-4">
         <section className="mb-6">
-          <h2 className="text-lg font-semibold mb-2">Grid (8 bars) — blank = rest</h2>
           <div
             className="overflow-x-hidden rounded border border-bg-tertiary select-none"
             style={{ paddingLeft: INITIAL_SCROLL, cursor: isDragging ? 'grabbing' : 'grab' }}
@@ -384,7 +382,7 @@ export function Editor() {
               <table className="border-collapse text-sm">
                 <thead>
                   <tr>
-                    <th className="w-10 p-1 text-left text-text-secondary font-normal sticky left-0 bg-bg-secondary z-10">String</th>
+                    {/* <th className="w-10 p-1 text-left text-text-secondary font-normal sticky left-0 bg-bg-secondary z-10">String</th> */}
                     {Array.from({ length: totalColumns }, (_, i) => (
                       <th
                         key={i}
@@ -401,7 +399,7 @@ export function Editor() {
                 <tbody>
                   {[0, 1, 2, 3, 4, 5].map((s) => (
                     <tr key={s}>
-                      <td className="p-1 text-text-secondary font-mono sticky left-0 bg-bg-secondary z-10">{stringLabels[s]}</td>
+                      {/* <td className="p-1 text-text-secondary font-mono sticky left-0 bg-bg-secondary z-10">{stringLabels[s]}</td> */}
                       {grid[s]?.map((fret, col) => (
                         <td
                           key={col}
@@ -430,7 +428,6 @@ export function Editor() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold mb-2">Preview</h2>
           <div
             className="select-none rounded overflow-hidden"
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
@@ -440,6 +437,7 @@ export function Editor() {
             tab={tab}
             scrollPosition={scrollPosition}
             scrollMode={true}
+            showBeatIndicator={false}
             currentBeat={currentBeat}
             countIn={countIn}
             activeNoteIndex={activeNoteIndex}
@@ -450,17 +448,7 @@ export function Editor() {
             tuning={tuning}
           />
           </div>
-          <div className="mt-4 flex items-center gap-4">
-            <Slider
-              value={[bpm]}
-              onValueChange={([v]) => setBpm(v)}
-              min={40}
-              max={220}
-              step={1}
-              className="w-32"
-            />
-            <span className="text-sm tabular-nums w-10 text-right">{bpm}</span>
-          </div>
+         
         </section>
       </div>
     </div>

@@ -3,4 +3,4 @@
  */
 
 export { createExerciseEngine } from './scheduler.js';
-export { riffToTab } from './riffToTab.js';
+export { riffToTab, getSubdivisionsPerBar, getSubdivisionsPerBeat } from './riffToTab.js';

@@ -1,5 +1,7 @@
-import { getNoteAt, isRootNote as isRootNoteEngine } from '../core/music';
+import { getNoteAt, getNoteName, isRootNote as isRootNoteEngine } from '../core/music';
 import { STANDARD_TUNING } from '../data/tunings';
+
+const FRET_DOTS = [3, 5, 7, 9, 12, 15, 17];
 
 /**
  * Check if the note at (stringIndex, fret) is the root pitch class (for scale reference).
@@ -79,6 +81,23 @@ export function PositionDiagram({ notes, title = '', fullScale = false, rootSemi
                 })}
               </div>
             ))}
+            {/* Note labels under each fret column (low E string); bold on dot frets */}
+            <div className="flex w-full mt-0.5">
+              {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => {
+                const noteSemitone = getNoteAt(5, fret, tuning);
+                const noteName = getNoteName(noteSemitone);
+                const isDotFret = FRET_DOTS.includes(fret);
+                return (
+                  <div
+                    key={fret}
+                    className={`text-center text-[10px] text-text-secondary ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'} ${isDotFret ? 'font-bold text-text-primary' : ''}`}
+                    style={!fullScale ? { width: cellWidth } : undefined}
+                  >
+                    {noteName}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

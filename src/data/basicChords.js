@@ -21,26 +21,27 @@ export function isRootAt(stringIndex, dataCol, startFret, rootLetter, tuning = S
   return ROOT_SEMITONES[rootLetter] === semitone;
 }
 
-// Chord: { frets: number[], root: string, startFret?: number, barre?: [colIndex, fromString, toString] }
-// barre: optional, 0-based; colIndex = display column (1 = first fret), fromString/toString = string indices 0-5
+// Chord: { frets: number[], root: string, startFret?: number, barre?: number[] }
+// barre: optional. Either [fret, startString, endString] 1-based (fret 1–24, strings 1–6, 1=high e) e.g. [1,1,6];
+//        or legacy [colIndex, fromString, toString] 0-based (colIndex 1=first fret, strings 0–5).
 export const BASIC_CHORDS = {
   major: [
     { root: 'A', frets: [0, 2, 2, 2, 0, -1] },
-    { root: 'B', frets: [0,2,2,2,0,-1], startFret: 2, barre: [1, 0, 5] },
+    { root: 'B', frets: [0,2,2,2,0,-1], startFret: 2, barre: [2, 1, 5] },
     { root: 'C', frets: [0, 1, 0, 0, 2, 3] },
     { root: 'D', frets: [2, 3, 2, 0, -1, -1] },
     { root: 'E', frets: [0, 0, 1, 2, 2, 0] },
-    { root: 'F', frets: [0,0,1,2,2,0], startFret: 1, barre: [1, 0, 5] },
-    { root: 'G', frets: [3, 0, 0, 0, 2, 3], barre: [3, 4, 5] },
+    { root: 'F', frets: [0,0,1,2,2,0], startFret: 1, barre: [1, 1, 6] },
+    { root: 'G', frets: [3, 0, 0, 0, 2, 3]},
   ],
   minor: [
     { root: 'A', frets: [0, 1, 2, 2, 0, -1] },
-    { root: 'B', frets: [0,2,2,2,0,-1], startFret: 2, barre: [1, 0, 5] },
+    { root: 'B', frets: [0,2,2,2,0,-1], startFret: 2, barre: [2, 1, 5] },
     { root: 'C', frets: [-1, 1, 0, 1, 3, -1]},
     { root: 'D', frets: [2, 3, 1, 0, -1, -1] },
     { root: 'E', frets: [0, 0, 0, 2, 2, 0] },
-    { root: 'F', frets: [0,0,0,2,2,0], startFret: 1, barre: [1, 0, 5] },
-    { root: 'G', frets: [0,0,0,2,2,0], startFret: 3 },
+    { root: 'F', frets: [0,0,0,2,2,0], startFret: 1, barre: [1, 1, 6] },
+    { root: 'G', frets: [0,0,0,2,2,0], startFret: 3, barre: [3,1,6] },
   ],
 
 };

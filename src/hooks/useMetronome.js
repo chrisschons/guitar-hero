@@ -5,8 +5,9 @@ import { getBeatsPerBarForDots } from '../data/exerciseTypes';
 /**
  * Thin wrapper around core/audio metronome. Starts/stops when isPlaying changes;
  * recreates metronome when bpm, subdivision, volume, or timeSignatureId change.
+ * @param {number} [countInBeats] - 0 = no count-in; default = beatsPerBar
  */
-export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCountIn, volume = 0.3, timeSignatureId = '4/4') {
+export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCountIn, volume = 0.3, timeSignatureId = '4/4', countInBeats) {
   const metronomeRef = useRef(null);
   const onBeatRef = useRef(onBeat);
   const onTickRef = useRef(onTick);
@@ -23,6 +24,7 @@ export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCoun
       subdivision,
       beatsPerBar,
       volume,
+      countInBeats: countInBeats !== undefined ? countInBeats : beatsPerBar,
       onBeat: (beat) => onBeatRef.current?.(beat),
       onTick: (tick) => onTickRef.current?.(tick),
       onCountIn: (n) => onCountInRef.current?.(n),
@@ -32,7 +34,7 @@ export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCoun
       meta.stop();
       metronomeRef.current = null;
     };
-  }, [bpm, subdivision, volume, beatsPerBar]);
+  }, [bpm, subdivision, volume, beatsPerBar, countInBeats]);
 
   useEffect(() => {
     if (isPlaying) {

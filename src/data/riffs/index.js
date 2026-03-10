@@ -3,11 +3,24 @@
  */
 
 import { demo44Riff, demo68Riff } from './demos.js';
+import {
+  gallopBeginnerRiff,
+  gallopIntermediateRiff,
+  powerChordBeginnerRiff,
+  powerChordIntermediateRiff,
+} from './gallops.js';
 import { riffToTab } from '../../core/exercise/riffToTab.js';
 import { loadUserRiffs } from './userRiffsStorage.js';
 
 /** @type {import('./gallops.js').Riff[]} */
-export const RIFFS = [demo44Riff, demo68Riff];
+export const RIFFS = [
+  demo44Riff,
+  demo68Riff,
+  gallopBeginnerRiff,
+  gallopIntermediateRiff,
+  powerChordBeginnerRiff,
+  powerChordIntermediateRiff,
+];
 
 /**
  * @param {string} id
@@ -31,3 +44,9 @@ export function getMergedRiffList() {
 }
 
 export { demo44Riff, demo68Riff } from './demos.js';
+export {
+  gallopBeginnerRiff,
+  gallopIntermediateRiff,
+  powerChordBeginnerRiff,
+  powerChordIntermediateRiff,
+} from './gallops.js';

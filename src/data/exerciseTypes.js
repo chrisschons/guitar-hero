@@ -40,7 +40,7 @@ export function getSlotsPerMeasure(timeSignatureId, subdivision) {
   return pulsesPerBar * sub;
 }
 
-// Root notes with their fret position on low E string
+// Root notes with their fret position on low E string (subset for backward compat; use NOTE_NAMES for full range)
 export const ROOT_NOTES = [
   { id: 'E', name: 'E', fret: 0 },
   { id: 'G', name: 'G', fret: 3 },
@@ -48,16 +48,27 @@ export const ROOT_NOTES = [
   { id: 'B', name: 'B', fret: 7 },
 ];
 
-// Get fret offset from A (the default root for pentatonic)
-export function getRootOffset(rootId) {
-  const root = ROOT_NOTES.find(r => r.id === rootId);
-  return root ? root.fret - 5 : 0;
+// Low E string open = E (4). Root fret = (semitone - 4 + 12) % 12. A = fret 5 so offset from A = that - 5.
+function rootFretFromSemitone(semitone) {
+  return ((semitone - 4) % 12 + 12) % 12;
 }
 
-// Get absolute fret for root on low E
+// Get fret offset from A (the default root for pentatonic). Supports any note name via ROOT_SEMITONES.
+export function getRootOffset(rootId) {
+  const root = ROOT_NOTES.find(r => r.id === rootId);
+  if (root) return root.fret - 5;
+  const semitone = ROOT_SEMITONES[rootId];
+  if (semitone === undefined) return 0;
+  return rootFretFromSemitone(semitone) - 5;
+}
+
+// Get absolute fret for root on low E. Supports any note name via ROOT_SEMITONES.
 export function getRootFret(rootId) {
   const root = ROOT_NOTES.find(r => r.id === rootId);
-  return root ? root.fret : 0;
+  if (root) return root.fret;
+  const semitone = ROOT_SEMITONES[rootId];
+  if (semitone === undefined) return 0;
+  return rootFretFromSemitone(semitone);
 }
 
 // Convert a note [stringIndex, fret] to a tab column
@@ -202,14 +213,14 @@ export const SCALE_INTERVALS = {
 // String open note semitones from C (e=4, B=11, G=7, D=2, A=9, E=4) - string index 0 high e to 5 low E
 // Sourced from music engine / standard tuning for single source of truth
 import { STANDARD_TUNING } from '../data/tunings.js';
-import { getScale as getScaleFromEngine, getNoteAt } from '../core/music/index.js';
+import { getScale as getScaleFromEngine, getNoteAt, ROOT_SEMITONES } from '../core/music/index.js';
 import { RIFFS, getRiff } from './riffs/index.js';
 import { CHORD_PROGRESSIONS, generateChordProgressionTab } from './chordProgressions.js';
 import { riffToTab } from '../core/exercise/riffToTab.js';
 export const STRING_SEMITONES = STANDARD_TUNING;
 
-// Get position notes for reference page (neutral/key of A). Returns { notes: [[stringIndex, fret], ...] }.
-export function getReferencePosition(scaleTypeId, positionIndex) {
+// Get position notes for reference page, transposed from base key of A by rootId. Returns { notes: [[stringIndex, fret], ...] }.
+export function getReferencePosition(scaleTypeId, positionIndex, rootId = 'A') {
   let positions;
   switch (scaleTypeId) {
     case 'pentatonic': positions = PENTATONIC_POSITIONS; break;
@@ -218,17 +229,24 @@ export function getReferencePosition(scaleTypeId, positionIndex) {
     case 'minor-3nps': positions = MINOR_3NPS_POSITIONS; break;
     default: return { notes: [] };
   }
-  const notes = positions[positionIndex] ? [...positions[positionIndex]] : [];
+  const baseNotes = positions[positionIndex] ? positions[positionIndex] : [];
+  // Base shapes are in key of A (rootSemitone 9). Transpose by semitone difference to requested root.
+  const baseRootSemitone = ROOT_SEMITONES.A ?? 9;
+  const targetSemitone = ROOT_SEMITONES[rootId] ?? baseRootSemitone;
+  const semitoneDiff = ((targetSemitone - baseRootSemitone) % 12 + 12) % 12;
+  const notes = baseNotes
+    .map(([stringIndex, fret]) => [stringIndex, fret + semitoneDiff])
+    .filter(([, fret]) => fret >= 0 && fret <= 23);
   return { notes };
 }
 
-// Get all scale notes across the fretboard for reference (key of A). Returns { notes }.
+// Get all scale notes across the fretboard for reference, for a given rootId (default A). Returns { notes }.
 // Uses music engine for scale pitch classes and getNoteAt.
-export function getReferenceFullScale(scaleTypeId) {
+export function getReferenceFullScale(scaleTypeId, rootId = 'A') {
   const scaleType = scaleTypeId === 'major-3nps' ? 'major' : scaleTypeId === 'minor-3nps' ? 'minor' : scaleTypeId;
   const intervals = SCALE_INTERVALS[scaleType];
   if (!intervals) return { notes: [] };
-  const rootSemitone = 9; // A
+  const rootSemitone = ROOT_SEMITONES[rootId] ?? 9; // Default A
   const scaleNotes = getScaleFromEngine(rootSemitone, intervals);
   const notes = [];
   for (let stringIndex = 0; stringIndex < 6; stringIndex++) {
@@ -270,25 +288,25 @@ const BLUES_POSITIONS = [
   [[5, 15], [5, 17], [5, 18], [4, 15], [4, 17], [3, 14], [3, 17], [3, 18], [2, 14], [2, 17], [1, 15], [1, 17], [1, 18], [0, 15], [0, 17]],
 ];
 
-// Major scale 3-notes-per-string positions (base in A)
-// Each position starts on a different scale degree
+// Major scale 3-notes-per-string positions (base in A, standard tuning).
+// Position 1: E 5,7,9; A 5,7,9; D 6,7,9; G 6,7,9; B 7,9,10; e 7,9,10 (E key: E/A 0,2,4; D/G 1,2,4; B/e 2,4,5).
 const MAJOR_3NPS_POSITIONS = [
-  // Position 1 - starts on root (A) at fret 5 on low E
-  [[5, 4], [5, 5], [5, 7], [4, 4], [4, 5], [4, 7], [3, 4], [3, 6], [3, 7], [2, 4], [2, 6], [2, 7], [1, 5], [1, 7], [1, 9], [0, 5], [0, 7], [0, 9]],
-  // Position 2 - starts on 2nd (B) at fret 7 on low E
+  // Position 1 - root (A) at fret 5 on low E; each string has 3 scale notes in order
   [[5, 5], [5, 7], [5, 9], [4, 5], [4, 7], [4, 9], [3, 6], [3, 7], [3, 9], [2, 6], [2, 7], [2, 9], [1, 7], [1, 9], [1, 10], [0, 7], [0, 9], [0, 10]],
+  // Position 2 - starts on 2nd (B) at fret 7 on low E
+  [[5, 7], [5, 9], [5, 11], [4, 5], [4, 7], [4, 9], [3, 6], [3, 7], [3, 9], [2, 6], [2, 7], [2, 9], [1, 7], [1, 9], [1, 10], [0, 7], [0, 9], [0, 10]],
   // Position 3 - starts on 3rd (C#) at fret 9 on low E
-  [[5, 7], [5, 9], [5, 11], [4, 7], [4, 9], [4, 11], [3, 7], [3, 9], [3, 11], [2, 7], [2, 9], [2, 11], [1, 9], [1, 10], [1, 12], [0, 9], [0, 10], [0, 12]],
+  [[5, 9], [5, 11], [5, 12], [4, 7], [4, 9], [4, 11], [3, 7], [3, 9], [3, 11], [2, 7], [2, 9], [2, 11], [1, 9], [1, 10], [1, 12], [0, 9], [0, 10], [0, 12]],
 ];
 
-// Minor scale 3-notes-per-string positions (base in A)
+// Minor scale 3-notes-per-string positions (base in A). Low E: root A at fret 5, first three 5,7,8.
 const MINOR_3NPS_POSITIONS = [
   // Position 1 - starts on root (A) at fret 5 on low E
-  [[5, 3], [5, 5], [5, 7], [4, 3], [4, 5], [4, 7], [3, 4], [3, 5], [3, 7], [2, 4], [2, 5], [2, 7], [1, 5], [1, 6], [1, 8], [0, 5], [0, 7], [0, 8]],
+  [[5, 5], [5, 7], [5, 8], [4, 3], [4, 5], [4, 7], [3, 4], [3, 5], [3, 7], [2, 4], [2, 5], [2, 7], [1, 5], [1, 6], [1, 8], [0, 5], [0, 7], [0, 8]],
   // Position 2 - starts on 2nd (B) at fret 7 on low E
-  [[5, 5], [5, 7], [5, 8], [4, 5], [4, 7], [4, 8], [3, 5], [3, 7], [3, 9], [2, 5], [2, 7], [2, 9], [1, 6], [1, 8], [1, 10], [0, 7], [0, 8], [0, 10]],
+  [[5, 7], [5, 8], [5, 10], [4, 5], [4, 7], [4, 8], [3, 5], [3, 7], [3, 9], [2, 5], [2, 7], [2, 9], [1, 6], [1, 8], [1, 10], [0, 7], [0, 8], [0, 10]],
   // Position 3 - starts on b3rd (C) at fret 8 on low E
-  [[5, 7], [5, 8], [5, 10], [4, 7], [4, 8], [4, 10], [3, 7], [3, 9], [3, 10], [2, 7], [2, 9], [2, 10], [1, 8], [1, 10], [1, 12], [0, 8], [0, 10], [0, 12]],
+  [[5, 8], [5, 10], [5, 12], [4, 7], [4, 8], [4, 10], [3, 7], [3, 9], [3, 10], [2, 7], [2, 9], [2, 10], [1, 8], [1, 10], [1, 12], [0, 8], [0, 10], [0, 12]],
 ];
 
 // Pentatonic pattern generators
@@ -392,15 +410,15 @@ const SCALE_RUN_EXERCISES = {
     [2, 12 + offset], [1, 10 + offset], [1, 11 + offset], [1, 13 + offset], [0, 10 + offset], [0, 12 + offset],
   ],
   
-  // Major 3NPS runs
+  // Major 3NPS runs (position 1: matches MAJOR_3NPS_POSITIONS[0] in A)
   'major-pos1-2': (offset) => [
-    [5, 4 + offset], [5, 5 + offset], [5, 7 + offset], [4, 4 + offset], [4, 5 + offset], [4, 7 + offset], [3, 4 + offset], [3, 6 + offset], [3, 7 + offset],
-    [3, 9 + offset], [2, 6 + offset], [2, 7 + offset], [2, 9 + offset], [1, 7 + offset], [1, 9 + offset], [1, 10 + offset], [0, 7 + offset], [0, 9 + offset], [0, 10 + offset],
+    [5, 5 + offset], [5, 7 + offset], [5, 9 + offset], [4, 5 + offset], [4, 7 + offset], [4, 9 + offset], [3, 6 + offset], [3, 7 + offset], [3, 9 + offset], [2, 6 + offset], [2, 7 + offset], [2, 9 + offset],
+    [1, 7 + offset], [1, 9 + offset], [1, 10 + offset], [0, 7 + offset], [0, 9 + offset], [0, 10 + offset],
   ],
   
-  // Minor 3NPS runs
+  // Minor 3NPS runs (position 1 low E: 5,7,8 in A)
   'minor-pos1-2': (offset) => [
-    [5, 3 + offset], [5, 5 + offset], [5, 7 + offset], [4, 3 + offset], [4, 5 + offset], [4, 7 + offset], [3, 4 + offset], [3, 5 + offset], [3, 7 + offset],
+    [5, 5 + offset], [5, 7 + offset], [5, 8 + offset], [4, 3 + offset], [4, 5 + offset], [4, 7 + offset], [3, 4 + offset], [3, 5 + offset], [3, 7 + offset],
     [3, 9 + offset], [2, 5 + offset], [2, 7 + offset], [2, 9 + offset], [1, 6 + offset], [1, 8 + offset], [1, 10 + offset], [0, 7 + offset], [0, 8 + offset], [0, 10 + offset],
   ],
 };
@@ -583,7 +601,11 @@ export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision
     const offset = getRootOffset(rootNote);
     const baseNotes = MAJOR_3NPS_POSITIONS[exercise.positionIndex];
     const transposedNotes = baseNotes.map(([string, fret]) => [string, fret + offset]);
-    
+    // #region agent log
+    const lowEFirstThree = baseNotes.filter(([s]) => s === 5).slice(0, 3).map(([, f]) => f);
+    const transposedLowE = transposedNotes.filter(([s]) => s === 5).slice(0, 3).map(([, f]) => f);
+    if (typeof fetch !== 'undefined') fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'exerciseTypes.js:generateTab:major-3nps',message:'3NPS tab gen',data:{rootNote,offset,baseLowEFrets:lowEFirstThree,transposedLowEFrets:transposedLowE},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+    // #endregion
     const patternFn = GENERIC_PATTERNS[patternId] || GENERIC_PATTERNS['up-down'];
     return patternFn(transposedNotes);
   }
