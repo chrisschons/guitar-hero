@@ -227,7 +227,7 @@ import { CHORD_PROGRESSIONS, generateChordProgressionTab } from './chordProgress
 import { riffToTab } from '../core/exercise/riffToTab.js';
 export const STRING_SEMITONES = STANDARD_TUNING;
 
-import { getMajor3NPSPositions, getMinor3NPSPositions } from './scalePositions.js';
+import { getMajor3NPSPositions, getMinor3NPSPositions, get3NPSStartingOrder } from './scalePositions.js';
 
 // Get position notes for reference page. 3NPS uses canonical C-based positions transposed by rootId.
 export function getReferencePosition(scaleTypeId, positionIndex, rootId = 'A') {
@@ -589,8 +589,10 @@ export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision
     const exercise = type.exercises.find(e => e.id === exerciseId);
     if (!exercise) return [];
     const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const order = get3NPSStartingOrder(rootSemitone, 'major');
     const positions = getMajor3NPSPositions(rootSemitone);
-    const baseNotes = positions[exercise.positionIndex] || [];
+    const canonicalIndex = order[exercise.positionIndex] ?? 0;
+    const baseNotes = positions[canonicalIndex] || [];
     const patternFn = GENERIC_PATTERNS[patternId] || GENERIC_PATTERNS['up-down'];
     return patternFn(baseNotes);
   }
@@ -599,8 +601,10 @@ export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision
     const exercise = type.exercises.find(e => e.id === exerciseId);
     if (!exercise) return [];
     const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const order = get3NPSStartingOrder(rootSemitone, 'minor');
     const positions = getMinor3NPSPositions(rootSemitone);
-    const baseNotes = positions[exercise.positionIndex] || [];
+    const canonicalIndex = order[exercise.positionIndex] ?? 0;
+    const baseNotes = positions[canonicalIndex] || [];
     const patternFn = GENERIC_PATTERNS[patternId] || GENERIC_PATTERNS['up-down'];
     return patternFn(baseNotes);
   }
@@ -665,8 +669,10 @@ export function getVisualizationData(typeId, exerciseId, rootNote) {
     const exercise = type?.exercises.find(e => e.id === exerciseId);
     if (!exercise) return { type: 'major-3nps', positionIndex: 0, offset, positionNotes: [] };
     const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const order = get3NPSStartingOrder(rootSemitone, 'major');
     const positions = getMajor3NPSPositions(rootSemitone);
-    const positionNotes = positions[exercise.positionIndex] || [];
+    const canonicalIndex = order[exercise.positionIndex] ?? 0;
+    const positionNotes = positions[canonicalIndex] || [];
     return {
       type: 'major-3nps',
       scaleType: 'major',
@@ -680,8 +686,10 @@ export function getVisualizationData(typeId, exerciseId, rootNote) {
     const exercise = type?.exercises.find(e => e.id === exerciseId);
     if (!exercise) return { type: 'minor-3nps', positionIndex: 0, offset, positionNotes: [] };
     const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const order = get3NPSStartingOrder(rootSemitone, 'minor');
     const positions = getMinor3NPSPositions(rootSemitone);
-    const positionNotes = positions[exercise.positionIndex] || [];
+    const canonicalIndex = order[exercise.positionIndex] ?? 0;
+    const positionNotes = positions[canonicalIndex] || [];
     return {
       type: 'minor-3nps',
       scaleType: 'minor',

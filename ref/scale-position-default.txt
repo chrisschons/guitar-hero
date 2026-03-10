@@ -1,0 +1,28 @@
+major
+c pos4 f1
+c# pos3 f1
+d pos3 f2
+d# pos2 f1
+e pos1 f0
+f pos1 f1
+f# pos7 f1
+g pos7 f2
+g# pos6 f1
+a pos6 f2
+a# pos5 f1
+b pos5 f2
+
+
+minor
+c pos4 f1
+c# pos3 f0 
+d pos2 f0
+d# pos2 f0
+e pos1 f0
+f pos1 f1
+f# pos7 f0
+g pos7 f0
+g# pos6 f0
+a pos5 f0
+a# pos5 f1
+b pos4 f0

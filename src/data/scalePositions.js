@@ -84,3 +84,62 @@ export function getMinor3NPSPositions(rootSemitone, tuning = STANDARD_TUNING) {
     majorToMinor(pos, rootSemitone, tuning)
   );
 }
+
+/**
+ * For a given root and scaleType ('major' | 'minor'), return an ordering of
+ * canonical position indices [0–6] such that the first index is the
+ * configured starting position for that key (from ref/scale-position-default.txt),
+ * and the rest follow in canonical order, wrapping around.
+ *
+ * Example (major):
+ * - E: starting canonical position = 1 (index 0) → [0,1,2,3,4,5,6]
+ * - C: starting canonical position = 4 (index 3) → [3,4,5,6,0,1,2]
+ */
+export function get3NPSStartingOrder(rootSemitone, scaleType = 'major') {
+  const pc = ((rootSemitone % 12) + 12) % 12;
+
+  // Major defaults from ref/scale-position-default.txt (posX -> index X-1)
+  // c  pos4, c# pos3, d pos3, d# pos2, e pos1, f pos1, f# pos7, g pos7, g# pos6, a pos6, a# pos5, b pos5
+  const MAJOR_START_INDEX = {
+    0: 3, // C
+    1: 2, // C#
+    2: 2, // D
+    3: 1, // D#
+    4: 0, // E
+    5: 0, // F
+    6: 6, // F#
+    7: 6, // G
+    8: 5, // G#
+    9: 5, // A
+    10: 4, // A#
+    11: 4, // B
+  };
+
+  // Minor defaults from ref/scale-position-default.txt
+  // c pos4, c# pos3, d pos2, d# pos2, e pos1, f pos1, f# pos7, g pos7, g# pos6, a pos5, a# pos5, b pos4
+  const MINOR_START_INDEX = {
+    0: 3, // C
+    1: 2, // C#
+    2: 1, // D
+    3: 1, // D#
+    4: 0, // E
+    5: 0, // F
+    6: 6, // F#
+    7: 6, // G
+    8: 5, // G#
+    9: 4, // A
+    10: 4, // A#
+    11: 3, // B
+  };
+
+  const start =
+    scaleType === 'minor'
+      ? (MINOR_START_INDEX[pc] ?? 0)
+      : (MAJOR_START_INDEX[pc] ?? 0);
+
+  const order = [];
+  for (let i = 0; i < 7; i += 1) {
+    order.push((start + i) % 7);
+  }
+  return order;
+}

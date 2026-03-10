@@ -11,7 +11,15 @@ function isRootNoteInScale(stringIndex, fret, rootSemitone, tuning) {
   return isRootNoteEngine(semitone, rootSemitone);
 }
 
-export function PositionDiagram({ notes, title = '', fullScale = false, rootSemitone = 9, tuning = STANDARD_TUNING }) {
+export function PositionDiagram({
+  notes,
+  title = '',
+  fullScale = false,
+  rootSemitone = 9,
+  tuning = STANDARD_TUNING,
+  showFretNumbers = true,
+  showNoteLabels = true,
+}) {
   if (!notes.length) return null;
 
   const notesSet = new Set(notes.map(([s, f]) => `${s}-${f}`));
@@ -25,24 +33,26 @@ export function PositionDiagram({ notes, title = '', fullScale = false, rootSemi
   const firstLineBold = minFret === 1;
 
   return (
-    <div className={`bg-bg-secondary rounded-lg p-3 border border-bg-tertiary ${fullScale ? 'w-full' : ''}`}>
+    <div className={`bg-bg-secondary rounded-lg p-3 border border-bg-tertiary ${fullScale ? 'w-full' : ''} relative z-0`}>
       {title && (
         <div className="text-xs font-medium text-text-secondary mb-2 text-center">{title}</div>
       )}
       <div className="flex">
         <div className="flex-1 min-w-0">
           <div className="flex flex-col w-full">
-            <div className="flex mb-0.5 w-full">
-              {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => (
-                <div
-                  key={fret}
-                  className={`text-center text-[10px] text-text-secondary ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
-                  style={!fullScale ? { width: cellWidth } : undefined}
-                >
-                  {showZeroColumn && fret === 0 ? '' : fret}
-                </div>
-              ))}
-            </div>
+            {showFretNumbers && (
+              <div className="flex mb-0.5 w-full">
+                {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => (
+                  <div
+                    key={fret}
+                    className={`text-center text-[10px] text-text-secondary ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
+                    style={!fullScale ? { width: cellWidth } : undefined}
+                  >
+                    {showZeroColumn && fret === 0 ? '' : fret}
+                  </div>
+                ))}
+              </div>
+            )}
             {[0, 1, 2, 3, 4, 5].map((stringIndex) => (
               <div key={stringIndex} className="flex h-4 relative w-full">
                 <div
@@ -82,22 +92,24 @@ export function PositionDiagram({ notes, title = '', fullScale = false, rootSemi
               </div>
             ))}
             {/* Note labels under each fret column (low E string); bold on dot frets */}
-            <div className="flex w-full mt-0.5">
-              {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => {
-                const noteSemitone = getNoteAt(5, fret, tuning);
-                const noteName = getNoteName(noteSemitone);
-                const isDotFret = FRET_DOTS.includes(fret);
-                return (
-                  <div
-                    key={fret}
-                    className={`text-center text-[10px] text-text-secondary ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'} ${isDotFret ? 'font-bold text-text-primary' : ''}`}
-                    style={!fullScale ? { width: cellWidth } : undefined}
-                  >
-                    {noteName}
-                  </div>
-                );
-              })}
-            </div>
+            {showNoteLabels && (
+              <div className="flex w-full mt-0.5">
+                {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => {
+                  const noteSemitone = getNoteAt(5, fret, tuning);
+                  const noteName = getNoteName(noteSemitone);
+                  const isDotFret = FRET_DOTS.includes(fret);
+                  return (
+                    <div
+                      key={fret}
+                      className={`text-center text-[10px] text-text-secondary ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'} ${isDotFret ? 'font-bold text-text-primary' : ''}`}
+                      style={!fullScale ? { width: cellWidth } : undefined}
+                    >
+                      {noteName}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>

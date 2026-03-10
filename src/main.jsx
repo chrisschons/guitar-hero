@@ -4,10 +4,10 @@ import './index.css'
 import { loadAndApplyTheme } from './theme'
 import App from './App.jsx'
 import { BravuraDemo } from './pages/BravuraDemo.jsx'
-import { Reference } from './pages/Reference.jsx'
+import { Chords } from './pages/Chords.jsx'
 import { Tuner } from './pages/Tuner.jsx'
 import { Editor } from './pages/Editor.jsx'
-import { Debug } from './pages/Debug.jsx'
+import { Scales } from './pages/Scales.jsx'
 
 loadAndApplyTheme()
 
@@ -25,11 +25,11 @@ function Router() {
   }
 
   if (route === '#/chords') {
-    return <Reference />;
+    return <Chords />;
   }
 
   if (route === '#/scales') {
-    return <Debug />;
+    return <Scales />;
   }
 
   if (route === '#/tuner') {
@@ -41,11 +41,11 @@ function Router() {
   }
 
   if (route === '#/debug') {
-    return <Debug />;
+    return <Scales />;
   }
 
   if (route === '#/reference') {
-    return <Reference />;
+    return <Chords />;
   }
 
   return <App />;

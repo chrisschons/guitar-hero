@@ -3,7 +3,7 @@ import { ChordDiagram } from '../components/ChordDiagram';
 
 const CHORD_TYPES = ['major', 'minor', 'seventh'];
 
-export function Reference() {
+export function Chords() {
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary">
       <header className="sticky top-0 z-10 w-full bg-bg-secondary border-b border-bg-tertiary shrink-0">
