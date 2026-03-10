@@ -167,7 +167,7 @@ export function Controls({
       {/* Right: Scroll, Fretboard, Count-in, Theme */}
       <div className="flex flex-wrap gap-3 items-center">
       <div className="flex items-center gap-2">
-        {/*}
+      
         <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
           <Switch checked={tabScrollMode} onCheckedChange={onTabScrollModeChange} />
           <span>Scroll</span>
@@ -176,7 +176,7 @@ export function Controls({
           <Switch checked={showFretboard} onCheckedChange={onShowFretboardChange} />
           <span>Fretboard</span>
         </label>
-        */}
+      
         <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
           <Switch checked={countInEnabled} onCheckedChange={onCountInEnabledChange} />
           <span>Count-in</span>

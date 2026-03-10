@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { PENTATONIC_POSITIONS, BLUES_POSITIONS } from '../data/exerciseTypes';
 import {
   C_MAJOR_3NPS_POSITIONS,
@@ -42,16 +43,16 @@ const A_BLUES_PITCHES: PitchSet = new Set(
 
 export function Scales() {
   const [rootId, setRootId] = useLocalStorage<string>('guitar-hero-debug-root', 'C');
+  const [showCanonicalMajor, setShowCanonicalMajor] = useState(false);
+  const [showCanonicalMinor, setShowCanonicalMinor] = useState(false);
   const rootSemitone = ROOT_SEMITONES[rootId] ?? 0;
 
   const majorFullNotes = fullFretboardScaleNotes(majorPitchSet(rootSemitone));
   const minorFullNotes = fullFretboardScaleNotes(minorPitchSet(rootSemitone));
-  const majorByPosition = getMajor3NPSPositions(rootSemitone);
-  const minorByPosition = getMinor3NPSPositions(rootSemitone);
+  const majorPositions = getMajor3NPSPositions(rootSemitone);
+  const minorPositions = getMinor3NPSPositions(rootSemitone);
   const majorOrder = get3NPSStartingOrder(rootSemitone, 'major');
   const minorOrder = get3NPSStartingOrder(rootSemitone, 'minor');
-  const majorPositions = majorOrder.map((i) => majorByPosition[i]);
-  const minorPositions = minorOrder.map((i) => minorByPosition[i]);
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary relative">
@@ -79,22 +80,62 @@ export function Scales() {
       </header>
 
       <div className="flex-1 p-6 max-w-6xl mx-auto w-full">
+        <section className="mb-4">
+          <button
+            type="button"
+            onClick={() => setShowCanonicalMajor((prev) => !prev)}
+            className="flex items-center justify-between w-full rounded-md border border-bg-tertiary bg-bg-secondary px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
+          >
+            <span className="font-semibold text-text-secondary">
+              C Major 3NPS — canonical positions (1–7)
+            </span>
+            <span className="text-xs text-text-secondary">
+              {showCanonicalMajor ? 'Hide' : 'Show'}
+            </span>
+          </button>
+          {showCanonicalMajor && (
+            <div className="mt-3 flex flex-wrap gap-3 justify-start">
+              {C_MAJOR_3NPS_POSITIONS.map((notes, idx) => (
+                <PositionDiagram
+                  key={idx}
+                  notes={notes}
+                  title={`Position ${idx + 1}`}
+                  rootSemitone={ROOT_SEMITONES.C ?? 0}
+                  showFretNumbers={false}
+                  showNoteLabels={false}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="mb-8">
-          <h2 className="text-sm font-semibold text-text-secondary mb-2">
-            C Major 3NPS — canonical positions (1–7)
-          </h2>
-          <div className="flex flex-wrap gap-3 justify-start">
-            {C_MAJOR_3NPS_POSITIONS.map((notes, idx) => (
-              <PositionDiagram
-                key={idx}
-                notes={notes}
-                title={`Position ${idx + 1}`}
-                rootSemitone={ROOT_SEMITONES.C ?? 0}
-                showFretNumbers={false}
-                showNoteLabels={false}
-              />
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowCanonicalMinor((prev) => !prev)}
+            className="flex items-center justify-between w-full rounded-md border border-bg-tertiary bg-bg-secondary px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
+          >
+            <span className="font-semibold text-text-secondary">
+              C Natural Minor 3NPS — canonical positions (1–7)
+            </span>
+            <span className="text-xs text-text-secondary">
+              {showCanonicalMinor ? 'Hide' : 'Show'}
+            </span>
+          </button>
+          {showCanonicalMinor && (
+            <div className="mt-3 flex flex-wrap gap-3 justify-start">
+              {getMinor3NPSPositions(ROOT_SEMITONES.C ?? 0).map((notes, idx) => (
+                <PositionDiagram
+                  key={idx}
+                  notes={notes}
+                  title={`Position ${idx + 1}`}
+                  rootSemitone={ROOT_SEMITONES.C ?? 0}
+                  showFretNumbers={false}
+                  showNoteLabels={false}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="mb-10">

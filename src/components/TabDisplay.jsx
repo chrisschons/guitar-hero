@@ -4,16 +4,16 @@ import { getStringLabels } from '../core/music';
 import { STANDARD_TUNING } from '../data/tunings';
 import { getSlotsPerMeasure, TIME_SIGNATURES, getBeatsPerBarForDots } from '../data/exerciseTypes';
 
-const COLUMN_WIDTH = 50;
+const COLUMN_WIDTH = 70;
 const PADDING_COLUMNS = 3;
 const PLAYHEAD_OFFSET = 50; // tuned to align note with playhead when sound plays
 const INITIAL_SCROLL = (PADDING_COLUMNS * COLUMN_WIDTH) - PLAYHEAD_OFFSET; // 100px
 
 // Compact static (wrapped) view
-const STATIC_COLUMN_WIDTH = 28;
-const STATIC_ROW_HEIGHT = 72;
-const STATIC_STRING_HEIGHT = 12;
-const STATIC_ROW_GAP = 40;
+const STATIC_COLUMN_WIDTH = 42;
+const STATIC_ROW_HEIGHT = 96;
+const STATIC_STRING_HEIGHT = 16;
+const STATIC_ROW_GAP = 48;
 
 export function TabDisplay({
   tab,
@@ -272,7 +272,7 @@ function TabColumn({ column, isActive, showBarLine }) {
             />
             {note !== null && (
               <span
-                className={`font-mono text-lg font-bold relative text-accent ${
+                className={`font-mono text-xl font-bold relative text-accent ${
                   isActive ? 'text-white scale-125' : ''
                 }`}
                 style={{ 
@@ -317,7 +317,7 @@ function StaticTabColumn({ column, isActive, showBarLine, showEndBarLine }) {
             />
             {note !== null && (
               <span
-                className={`font-mono text-xs font-bold relative text-accent ${
+                className={`font-mono text-sm font-bold relative text-accent ${
                   isActive ? 'text-white scale-110' : ''
                 }`}
                 style={{

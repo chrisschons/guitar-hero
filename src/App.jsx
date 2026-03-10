@@ -284,26 +284,38 @@ function App() {
         />
       </div>
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col pb-24">
         <TabDisplay
-            tab={tab}
-            scrollPosition={scrollPosition}
-            scrollMode={tabScrollMode}
-            currentBeat={currentBeat}
-            countIn={countIn}
-            activeNoteIndex={activeNoteIndex}
-            subdivision={effectiveSubdivision}
-            timeSignatureId={effectiveTimeSignatureId}
-            notesPerMeasureOverride={notesPerMeasureOverride}
-            loopTicks={loopTicks}
-            tuning={tuning}
-          />
+          tab={tab}
+          scrollPosition={scrollPosition}
+          scrollMode={tabScrollMode}
+          currentBeat={currentBeat}
+          countIn={countIn}
+          activeNoteIndex={activeNoteIndex}
+          subdivision={effectiveSubdivision}
+          timeSignatureId={effectiveTimeSignatureId}
+          notesPerMeasureOverride={notesPerMeasureOverride}
+          loopTicks={loopTicks}
+          tuning={tuning}
+        />
 
         <div className="max-w-[1200px] mx-auto px-5 mt-6 flex-1 flex flex-col">
-          {showFretboard && <FretboardDiagram vizData={vizData} currentNotes={currentNotes} rootNote={rootNote} tuning={tuning} showFretNotes={showFretNotes} />}
+          {showFretboard && (
+            <FretboardDiagram
+              vizData={vizData}
+              currentNotes={currentNotes}
+              rootNote={rootNote}
+              tuning={tuning}
+              showFretNotes={showFretNotes}
+            />
+          )}
+        </div>
+      </div>
 
-          {/* Play, Reset, and BPM in one line */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
+      <footer className="fixed bottom-0 left-0 right-0 w-full border-t border-bg-tertiary bg-bg-secondary py-3 z-20">
+        <div className="max-w-[1200px] mx-auto px-5 flex items-center justify-between gap-4 flex-wrap">
+          {/* Controls on the left */}
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="flex gap-2 items-center">
               <button
                 onClick={handleReset}
@@ -315,7 +327,17 @@ function App() {
                 onClick={handlePlayToggle}
                 className="flex items-center gap-2 px-5 py-2 rounded-full bg-accent text-white text-sm font-medium cursor-pointer transition-all hover:bg-accent-light"
               >
-                {isPlaying ? <><Pause size={18} /><span>Pause</span></> : <><Play size={18} /><span>Play</span></>}
+                {isPlaying ? (
+                  <>
+                    <Pause size={18} />
+                    <span>Pause</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={18} />
+                    <span>Play</span>
+                  </>
+                )}
               </button>
             </div>
             <div className="flex items-center gap-2">
@@ -328,40 +350,35 @@ function App() {
                 step={1}
                 className="w-[100px]"
               />
-              <span className="text-sm font-medium text-text-primary tabular-nums w-8 text-right">{bpm}</span>
+              <span className="text-sm font-medium text-text-primary tabular-nums w-8 text-right">
+                {bpm}
+              </span>
             </div>
           </div>
 
-          <footer className="mt-auto pt-12 pb-6 text-center flex flex-wrap items-center justify-center gap-4">
+          {/* Links on the right */}
+          <div className="flex items-center gap-4 flex-wrap justify-end text-xs">
             <a
               href="#/scales"
-              className="text-xs text-accent hover:text-accent-light transition-colors"
+              className="text-accent hover:text-accent-light transition-colors"
             >
               Scales
             </a>
             <a
               href="#/chords"
-              className="text-xs text-accent hover:text-accent-light transition-colors"
+              className="text-accent hover:text-accent-light transition-colors"
             >
               Chords
             </a>
-            {/*
-            <a
-              href="#/tuner"
-              className="text-xs text-accent hover:text-accent-light transition-colors"
-            >
-              Tuner
-            </a>
-            */}
             <a
               href="#/editor"
-              className="text-xs text-accent hover:text-accent-light transition-colors"
+              className="text-accent hover:text-accent-light transition-colors"
             >
               Riff Editor
             </a>
             <a
               href="#/bravura-demo"
-              className="text-xs text-accent hover:text-accent-light transition-colors"
+              className="text-accent hover:text-accent-light transition-colors"
             >
               Bravura / SMuFL Demo
             </a>
@@ -374,9 +391,9 @@ function App() {
             >
               <RotateCcw size={14} />
             </button>
-          </footer>
+          </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

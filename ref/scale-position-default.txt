@@ -1,16 +1,16 @@
 major
-c pos4 f1
+c pos3 f0
 c# pos3 f1
-d pos3 f2
+d pos2 f0
 d# pos2 f1
 e pos1 f0
 f pos1 f1
-f# pos7 f1
-g pos7 f2
-g# pos6 f1
-a pos6 f2
-a# pos5 f1
-b pos5 f2
+f# pos1 f2
+g pos1 f3
+g# pos1 f4
+a pos1 f5
+a# pos1 f6
+b pos1 f7
 
 
 minor
