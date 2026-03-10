@@ -2,6 +2,8 @@
  * Riff library — public API. User riffs in localStorage override/supplement built-in.
  */
 
+/** @typedef {import('../../types/riff').Riff} Riff */
+
 import { demo44Riff, demo68Riff } from './demos.js';
 import {
   gallopBeginnerRiff,
@@ -9,10 +11,9 @@ import {
   powerChordBeginnerRiff,
   powerChordIntermediateRiff,
 } from './gallops.js';
-import { riffToTab } from '../../core/exercise/riffToTab.js';
 import { loadUserRiffs } from './userRiffsStorage.js';
 
-/** @type {import('./gallops.js').Riff[]} */
+/** @type {Riff[]} */
 export const RIFFS = [
   demo44Riff,
   demo68Riff,
@@ -24,7 +25,7 @@ export const RIFFS = [
 
 /**
  * @param {string} id
- * @returns {import('./gallops.js').Riff | undefined}
+ * @returns {Riff | undefined}
  */
 export function getRiff(id) {
   const user = loadUserRiffs()[id];
@@ -50,3 +51,4 @@ export {
   powerChordBeginnerRiff,
   powerChordIntermediateRiff,
 } from './gallops.js';
+

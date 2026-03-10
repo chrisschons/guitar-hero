@@ -1,11 +1,11 @@
+/** @typedef {import('../../types/riff').Riff} Riff */
+
 /**
  * User riffs in localStorage. Merged with built-in riffs for getRiff/list.
  */
 
 const STORAGE_KEY = 'guitar-hero-user-riffs';
 const ID_PREFIX = 'user-riff-';
-
-/** @typedef {import('./gallops.js').Riff} Riff */
 
 /**
  * @returns {{ [id: string]: Riff }}
@@ -48,3 +48,4 @@ export function nextUserRiffId() {
 export function getUserRiffIds() {
   return Object.keys(loadUserRiffs());
 }
+

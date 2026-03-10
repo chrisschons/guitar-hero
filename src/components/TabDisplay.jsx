@@ -15,7 +15,20 @@ const STATIC_ROW_HEIGHT = 72;
 const STATIC_STRING_HEIGHT = 12;
 const STATIC_ROW_GAP = 40;
 
-export function TabDisplay({ tab, scrollPosition, scrollMode = false, currentBeat, countIn, activeNoteIndex, subdivision = 2, timeSignatureId = '4/4', notesPerMeasureOverride = null, loopTicks = 0, tuning = STANDARD_TUNING, showBeatIndicator = true }) {
+export function TabDisplay({
+  tab,
+  scrollPosition,
+  scrollMode = false,
+  currentBeat,
+  countIn,
+  activeNoteIndex,
+  subdivision = 2,
+  timeSignatureId = '4/4',
+  notesPerMeasureOverride = null,
+  loopTicks = 0,
+  tuning = STANDARD_TUNING,
+  showBeatIndicator = true,
+}) {
   // #region agent log
   const tuningId = tuning?.join?.('-') ?? 'no-tuning';
   if (tab?.length && (tab.length <= 5 || tab[0])) {

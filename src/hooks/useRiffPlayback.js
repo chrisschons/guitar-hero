@@ -7,9 +7,18 @@ const DEFAULT_BARS = 8;
 /**
  * Playback for a single riff object (e.g. editor state). Uses same engine as useExercise.
  * Tab is padded to the requested number of bars so the loop is an exact bar length.
- * @param {import('../data/riffs/gallops.js').Riff} riff
+ * @param {import('../types/riff').Riff | undefined} riff
  * @param {number} [bars]
- * @returns {{ tab: (number|null)[][], activeNoteIndex: number, onTick: () => void, reset: () => void, getCurrentColumn: () => (number|null)[]|null, getActiveNoteIndex: () => number, loopTicks: number }}
+ * @returns {{
+ *   tab: (number | null)[][],
+ *   activeNoteIndex: number,
+ *   onTick: () => void,
+ *   reset: () => void,
+ *   seek: (tickIndex: number) => void,
+ *   getCurrentColumn: () => (number | null)[] | null,
+ *   getActiveNoteIndex: () => number,
+ *   loopTicks: number
+ * }}
  */
 export function useRiffPlayback(riff, bars = DEFAULT_BARS) {
   const engineRef = useRef(null);

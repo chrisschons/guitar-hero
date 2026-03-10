@@ -4,10 +4,10 @@ import './index.css'
 import { loadAndApplyTheme } from './theme'
 import App from './App.jsx'
 import { BravuraDemo } from './pages/BravuraDemo.jsx'
-import { Chords } from './pages/Chords.jsx'
-import { Tuner } from './pages/Tuner.jsx'
-import { Editor } from './pages/Editor.jsx'
-import { Scales } from './pages/Scales.jsx'
+import { Chords } from './pages/Chords.tsx'
+import { Tuner } from './pages/Tuner.tsx'
+import { Editor } from './pages/Editor.tsx'
+import { Scales } from './pages/Scales.tsx'
 
 loadAndApplyTheme()
 
