@@ -334,10 +334,16 @@ function App() {
 
           <footer className="mt-auto pt-12 pb-6 text-center flex flex-wrap items-center justify-center gap-4">
             <a
-              href="#/reference"
+              href="#/scales"
               className="text-xs text-accent hover:text-accent-light transition-colors"
             >
-              Scale Reference
+              Scales
+            </a>
+            <a
+              href="#/chords"
+              className="text-xs text-accent hover:text-accent-light transition-colors"
+            >
+              Chords
             </a>
             {/*
             <a

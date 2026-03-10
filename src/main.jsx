@@ -7,6 +7,7 @@ import { BravuraDemo } from './pages/BravuraDemo.jsx'
 import { Reference } from './pages/Reference.jsx'
 import { Tuner } from './pages/Tuner.jsx'
 import { Editor } from './pages/Editor.jsx'
+import { Debug } from './pages/Debug.jsx'
 
 loadAndApplyTheme()
 
@@ -23,8 +24,12 @@ function Router() {
     return <BravuraDemo />;
   }
 
-  if (route === '#/reference') {
+  if (route === '#/chords') {
     return <Reference />;
+  }
+
+  if (route === '#/scales') {
+    return <Debug />;
   }
 
   if (route === '#/tuner') {
@@ -33,6 +38,14 @@ function Router() {
 
   if (route === '#/editor') {
     return <Editor />;
+  }
+
+  if (route === '#/debug') {
+    return <Debug />;
+  }
+
+  if (route === '#/reference') {
+    return <Reference />;
   }
 
   return <App />;

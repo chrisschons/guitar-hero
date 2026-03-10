@@ -132,6 +132,10 @@ export const EXERCISE_TYPES = [
       { id: 'pos1', name: 'Position 1', positionIndex: 0 },
       { id: 'pos2', name: 'Position 2', positionIndex: 1 },
       { id: 'pos3', name: 'Position 3', positionIndex: 2 },
+      { id: 'pos4', name: 'Position 4', positionIndex: 3 },
+      { id: 'pos5', name: 'Position 5', positionIndex: 4 },
+      { id: 'pos6', name: 'Position 6', positionIndex: 5 },
+      { id: 'pos7', name: 'Position 7', positionIndex: 6 },
     ],
     patterns: [
       { id: 'up-down', name: 'Up & Down' },
@@ -147,6 +151,10 @@ export const EXERCISE_TYPES = [
       { id: 'pos1', name: 'Position 1', positionIndex: 0 },
       { id: 'pos2', name: 'Position 2', positionIndex: 1 },
       { id: 'pos3', name: 'Position 3', positionIndex: 2 },
+      { id: 'pos4', name: 'Position 4', positionIndex: 3 },
+      { id: 'pos5', name: 'Position 5', positionIndex: 4 },
+      { id: 'pos6', name: 'Position 6', positionIndex: 5 },
+      { id: 'pos7', name: 'Position 7', positionIndex: 6 },
     ],
     patterns: [
       { id: 'up-down', name: 'Up & Down' },
@@ -219,25 +227,29 @@ import { CHORD_PROGRESSIONS, generateChordProgressionTab } from './chordProgress
 import { riffToTab } from '../core/exercise/riffToTab.js';
 export const STRING_SEMITONES = STANDARD_TUNING;
 
-// Get position notes for reference page, transposed from base key of A by rootId. Returns { notes: [[stringIndex, fret], ...] }.
+import { getMajor3NPSPositions, getMinor3NPSPositions } from './scalePositions.js';
+
+// Get position notes for reference page. 3NPS uses canonical C-based positions transposed by rootId.
 export function getReferencePosition(scaleTypeId, positionIndex, rootId = 'A') {
+  const targetSemitone = ROOT_SEMITONES[rootId] ?? 9;
   let positions;
   switch (scaleTypeId) {
     case 'pentatonic': positions = PENTATONIC_POSITIONS; break;
     case 'blues': positions = BLUES_POSITIONS; break;
-    case 'major-3nps': positions = MAJOR_3NPS_POSITIONS; break;
-    case 'minor-3nps': positions = MINOR_3NPS_POSITIONS; break;
+    case 'major-3nps': positions = getMajor3NPSPositions(targetSemitone); break;
+    case 'minor-3nps': positions = getMinor3NPSPositions(targetSemitone); break;
     default: return { notes: [] };
   }
   const baseNotes = positions[positionIndex] ? positions[positionIndex] : [];
-  // Base shapes are in key of A (rootSemitone 9). Transpose by semitone difference to requested root.
-  const baseRootSemitone = ROOT_SEMITONES.A ?? 9;
-  const targetSemitone = ROOT_SEMITONES[rootId] ?? baseRootSemitone;
-  const semitoneDiff = ((targetSemitone - baseRootSemitone) % 12 + 12) % 12;
-  const notes = baseNotes
-    .map(([stringIndex, fret]) => [stringIndex, fret + semitoneDiff])
-    .filter(([, fret]) => fret >= 0 && fret <= 23);
-  return { notes };
+  if (scaleTypeId === 'pentatonic' || scaleTypeId === 'blues') {
+    const baseRootSemitone = ROOT_SEMITONES.A ?? 9;
+    const semitoneDiff = ((targetSemitone - baseRootSemitone) % 12 + 12) % 12;
+    const notes = baseNotes
+      .map(([stringIndex, fret]) => [stringIndex, fret + semitoneDiff])
+      .filter(([, fret]) => fret >= 0 && fret <= 23);
+    return { notes };
+  }
+  return { notes: baseNotes };
 }
 
 // Get all scale notes across the fretboard for reference, for a given rootId (default A). Returns { notes }.
@@ -261,7 +273,7 @@ export function getReferenceFullScale(scaleTypeId, rootId = 'A') {
 }
 // Format: [stringIndex, fret] - strings: 0=e, 1=B, 2=G, 3=D, 4=A, 5=E
 // Verified against actual A minor pentatonic notes: A, C, D, E, G
-const PENTATONIC_POSITIONS = [
+export const PENTATONIC_POSITIONS = [
   // Position 1 (frets 5-8)
   [[5, 5], [5, 8], [4, 5], [4, 7], [3, 5], [3, 7], [2, 5], [2, 7], [1, 5], [1, 8], [0, 5], [0, 8]],
   // Position 2 (frets 7-10)
@@ -275,7 +287,7 @@ const PENTATONIC_POSITIONS = [
 ];
 
 // Blues scale positions (base in A) - pentatonic + blue note (b5)
-const BLUES_POSITIONS = [
+export const BLUES_POSITIONS = [
   // Position 1 (frets 5-8)
   [[5, 5], [5, 8], [4, 5], [4, 6], [4, 7], [3, 5], [3, 7], [2, 5], [2, 7], [2, 8], [1, 5], [1, 8], [0, 5], [0, 8]],
   // Position 2 (frets 7-10)
@@ -286,27 +298,6 @@ const BLUES_POSITIONS = [
   [[5, 12], [5, 15], [4, 12], [4, 13], [4, 15], [3, 12], [3, 14], [2, 12], [2, 14], [2, 15], [1, 13], [1, 15], [0, 12], [0, 15]],
   // Position 5 (frets 15-17)
   [[5, 15], [5, 17], [5, 18], [4, 15], [4, 17], [3, 14], [3, 17], [3, 18], [2, 14], [2, 17], [1, 15], [1, 17], [1, 18], [0, 15], [0, 17]],
-];
-
-// Major scale 3-notes-per-string positions (base in A, standard tuning).
-// Position 1: E 5,7,9; A 5,7,9; D 6,7,9; G 6,7,9; B 7,9,10; e 7,9,10 (E key: E/A 0,2,4; D/G 1,2,4; B/e 2,4,5).
-const MAJOR_3NPS_POSITIONS = [
-  // Position 1 - root (A) at fret 5 on low E; each string has 3 scale notes in order
-  [[5, 5], [5, 7], [5, 9], [4, 5], [4, 7], [4, 9], [3, 6], [3, 7], [3, 9], [2, 6], [2, 7], [2, 9], [1, 7], [1, 9], [1, 10], [0, 7], [0, 9], [0, 10]],
-  // Position 2 - starts on 2nd (B) at fret 7 on low E
-  [[5, 7], [5, 9], [5, 11], [4, 5], [4, 7], [4, 9], [3, 6], [3, 7], [3, 9], [2, 6], [2, 7], [2, 9], [1, 7], [1, 9], [1, 10], [0, 7], [0, 9], [0, 10]],
-  // Position 3 - starts on 3rd (C#) at fret 9 on low E
-  [[5, 9], [5, 11], [5, 12], [4, 7], [4, 9], [4, 11], [3, 7], [3, 9], [3, 11], [2, 7], [2, 9], [2, 11], [1, 9], [1, 10], [1, 12], [0, 9], [0, 10], [0, 12]],
-];
-
-// Minor scale 3-notes-per-string positions (base in A). Low E: root A at fret 5, first three 5,7,8.
-const MINOR_3NPS_POSITIONS = [
-  // Position 1 - starts on root (A) at fret 5 on low E
-  [[5, 5], [5, 7], [5, 8], [4, 3], [4, 5], [4, 7], [3, 4], [3, 5], [3, 7], [2, 4], [2, 5], [2, 7], [1, 5], [1, 6], [1, 8], [0, 5], [0, 7], [0, 8]],
-  // Position 2 - starts on 2nd (B) at fret 7 on low E
-  [[5, 7], [5, 8], [5, 10], [4, 5], [4, 7], [4, 8], [3, 5], [3, 7], [3, 9], [2, 5], [2, 7], [2, 9], [1, 6], [1, 8], [1, 10], [0, 7], [0, 8], [0, 10]],
-  // Position 3 - starts on b3rd (C) at fret 8 on low E
-  [[5, 8], [5, 10], [5, 12], [4, 7], [4, 8], [4, 10], [3, 7], [3, 9], [3, 10], [2, 7], [2, 9], [2, 10], [1, 8], [1, 10], [1, 12], [0, 8], [0, 10], [0, 12]],
 ];
 
 // Pentatonic pattern generators
@@ -542,13 +533,13 @@ const GENERIC_PATTERNS = {
   },
 };
 
-// Get position data for a scale type
-function getPositionsForScale(scaleType) {
+// Get position data for a scale type (rootSemitone for 3NPS; pentatonic/blues are A-based)
+function getPositionsForScale(scaleType, rootSemitone = 0) {
   switch (scaleType) {
     case 'pentatonic': return PENTATONIC_POSITIONS;
     case 'blues': return BLUES_POSITIONS;
-    case 'major': return MAJOR_3NPS_POSITIONS;
-    case 'minor': return MINOR_3NPS_POSITIONS;
+    case 'major': return getMajor3NPSPositions(rootSemitone);
+    case 'minor': return getMinor3NPSPositions(rootSemitone);
     default: return PENTATONIC_POSITIONS;
   }
 }
@@ -597,29 +588,21 @@ export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision
   if (typeId === 'major-3nps') {
     const exercise = type.exercises.find(e => e.id === exerciseId);
     if (!exercise) return [];
-    
-    const offset = getRootOffset(rootNote);
-    const baseNotes = MAJOR_3NPS_POSITIONS[exercise.positionIndex];
-    const transposedNotes = baseNotes.map(([string, fret]) => [string, fret + offset]);
-    // #region agent log
-    const lowEFirstThree = baseNotes.filter(([s]) => s === 5).slice(0, 3).map(([, f]) => f);
-    const transposedLowE = transposedNotes.filter(([s]) => s === 5).slice(0, 3).map(([, f]) => f);
-    if (typeof fetch !== 'undefined') fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'exerciseTypes.js:generateTab:major-3nps',message:'3NPS tab gen',data:{rootNote,offset,baseLowEFrets:lowEFirstThree,transposedLowEFrets:transposedLowE},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-    // #endregion
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const positions = getMajor3NPSPositions(rootSemitone);
+    const baseNotes = positions[exercise.positionIndex] || [];
     const patternFn = GENERIC_PATTERNS[patternId] || GENERIC_PATTERNS['up-down'];
-    return patternFn(transposedNotes);
+    return patternFn(baseNotes);
   }
 
   if (typeId === 'minor-3nps') {
     const exercise = type.exercises.find(e => e.id === exerciseId);
     if (!exercise) return [];
-    
-    const offset = getRootOffset(rootNote);
-    const baseNotes = MINOR_3NPS_POSITIONS[exercise.positionIndex];
-    const transposedNotes = baseNotes.map(([string, fret]) => [string, fret + offset]);
-    
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const positions = getMinor3NPSPositions(rootSemitone);
+    const baseNotes = positions[exercise.positionIndex] || [];
     const patternFn = GENERIC_PATTERNS[patternId] || GENERIC_PATTERNS['up-down'];
-    return patternFn(transposedNotes);
+    return patternFn(baseNotes);
   }
 
   if (typeId === 'scale-runs') {
@@ -681,10 +664,9 @@ export function getVisualizationData(typeId, exerciseId, rootNote) {
   if (typeId === 'major-3nps') {
     const exercise = type?.exercises.find(e => e.id === exerciseId);
     if (!exercise) return { type: 'major-3nps', positionIndex: 0, offset, positionNotes: [] };
-    
-    const baseNotes = MAJOR_3NPS_POSITIONS[exercise.positionIndex] || [];
-    const positionNotes = baseNotes.map(([string, fret]) => [string, fret + offset]);
-    
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const positions = getMajor3NPSPositions(rootSemitone);
+    const positionNotes = positions[exercise.positionIndex] || [];
     return {
       type: 'major-3nps',
       scaleType: 'major',
@@ -697,10 +679,9 @@ export function getVisualizationData(typeId, exerciseId, rootNote) {
   if (typeId === 'minor-3nps') {
     const exercise = type?.exercises.find(e => e.id === exerciseId);
     if (!exercise) return { type: 'minor-3nps', positionIndex: 0, offset, positionNotes: [] };
-    
-    const baseNotes = MINOR_3NPS_POSITIONS[exercise.positionIndex] || [];
-    const positionNotes = baseNotes.map(([string, fret]) => [string, fret + offset]);
-    
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const positions = getMinor3NPSPositions(rootSemitone);
+    const positionNotes = positions[exercise.positionIndex] || [];
     return {
       type: 'minor-3nps',
       scaleType: 'minor',
