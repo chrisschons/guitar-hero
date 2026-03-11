@@ -6,6 +6,9 @@ import {
   getMinor3NPSPositions,
   get3NPSStartingOrder,
 } from '../data/scalePositions';
+import {
+  getMajorFirstNPositionNotes,
+} from '../data/neutral3NPS';
 import { PositionDiagram } from '../components/PositionDiagram';
 import { getNoteAt, ROOT_SEMITONES, NOTE_NAMES } from '../core/music';
 import { STANDARD_TUNING } from '../data/tunings';
@@ -34,6 +37,23 @@ function minorPitchSet(rootSemitone: number): PitchSet {
   return new Set([0, 2, 3, 5, 7, 8, 10].map((i) => (i + rootSemitone) % 12));
 }
 
+function getLowEAnchor(notes: [number, number][]): number | null {
+  let anchor: number | null = null;
+  for (const [stringIndex, fret] of notes) {
+    if (stringIndex === 5 && (anchor === null || fret < anchor)) {
+      anchor = fret;
+    }
+  }
+  if (anchor === null) {
+    for (const [, fret] of notes) {
+      if (anchor === null || fret < anchor) {
+        anchor = fret;
+      }
+    }
+  }
+  return anchor;
+}
+
 const A_PENTATONIC_PITCHES: PitchSet = new Set(
   [0, 3, 5, 7, 10].map((i) => (i + (ROOT_SEMITONE_A ?? 9)) % 12)
 );
@@ -42,7 +62,7 @@ const A_BLUES_PITCHES: PitchSet = new Set(
 );
 
 export function Scales() {
-  const [rootId, setRootId] = useLocalStorage<string>('guitar-hero-debug-root', 'C');
+  const [rootId, setRootId] = useLocalStorage('guitar-hero-debug-root', 'C');
   const [showCanonicalMajor, setShowCanonicalMajor] = useState(false);
   const [showCanonicalMinor, setShowCanonicalMinor] = useState(false);
   const rootSemitone = ROOT_SEMITONES[rootId] ?? 0;
@@ -53,6 +73,7 @@ export function Scales() {
   const minorPositions = getMinor3NPSPositions(rootSemitone);
   const majorOrder = get3NPSStartingOrder(rootSemitone, 'major');
   const minorOrder = get3NPSStartingOrder(rootSemitone, 'minor');
+  const majorFirstSevenNotes = getMajorFirstNPositionNotes(rootSemitone, 7).flat();
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary relative">
@@ -142,6 +163,17 @@ export function Scales() {
           <h2 className="text-xl font-semibold text-text-primary mb-3">
             {rootId} Major 3NPS
           </h2>
+          {majorPositions.length > 0 && (
+            <p className="text-[10px] text-text-secondary mb-1">
+              {majorPositions.map((notes, idx) => {
+                const canonicalIndex = majorOrder[idx] ?? idx;
+                const anchor = getLowEAnchor(notes as [number, number][]);
+                return `box ${idx + 1}: p${canonicalIndex + 1}, f${anchor ?? '-'}${
+                  idx < majorPositions.length - 1 ? ' • ' : ''
+                }`;
+              })}
+            </p>
+          )}
           <p className="text-xs text-text-secondary mb-2">
             Full fretboard, then positions ordered by lowest fret (closest to nut first). Root
             highlighted. Labels remain canonical (Position 1–7).
@@ -150,6 +182,14 @@ export function Scales() {
             <PositionDiagram
               notes={majorFullNotes}
               title={`${rootId} major 3NPS — full fretboard`}
+              fullScale
+              rootSemitone={rootSemitone}
+            />
+          </div>
+          <div className="mb-4">
+            <PositionDiagram
+              notes={majorFirstSevenNotes}
+              title={`${rootId} major 3NPS — positions 1–7 (neutral shapes)`}
               fullScale
               rootSemitone={rootSemitone}
             />
