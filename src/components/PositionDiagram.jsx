@@ -19,11 +19,18 @@ export function PositionDiagram({
   tuning = STANDARD_TUNING,
   showFretNumbers = true,
   showNoteLabels = true,
+  extraNotes = [],
 }) {
-  if (!notes.length) return null;
+  if (!notes.length && !extraNotes.length) return null;
 
   const notesSet = new Set(notes.map(([s, f]) => `${s}-${f}`));
-  const frets = notes.map(([, f]) => f);
+  const extraSet = new Set(
+    extraNotes
+      .map(([s, f]) => `${s}-${f}`)
+      .filter((key) => !notesSet.has(key))
+  );
+  const baseFrets = notes.length ? notes : extraNotes;
+  const frets = baseFrets.map(([, f]) => f);
   const minFret = fullScale ? 0 : Math.min(...frets);
   const maxFret = fullScale ? 23 : Math.max(...frets);
   const fretRange = maxFret - minFret + 1;
@@ -65,8 +72,10 @@ export function PositionDiagram({
                   }}
                 />
                 {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => {
-                  const hasNote = notesSet.has(`${stringIndex}-${fret}`);
-                  const isRoot = hasNote && isRootNoteInScale(stringIndex, fret, rootSemitone, tuning);
+                  const key = `${stringIndex}-${fret}`;
+                  const hasNote = notesSet.has(key);
+                  const hasExtra = extraSet.has(key);
+                  const isRoot = (hasNote || hasExtra) && isRootNoteInScale(stringIndex, fret, rootSemitone, tuning);
                   const isFirstCol = fret === minFret;
                   const isNut = minFret === 0 && isFirstCol;
                   const isFirstLineBold = minFret === 1 && isFirstCol;
@@ -78,6 +87,16 @@ export function PositionDiagram({
                       } ${isFirstLineBold ? 'border-l-[4px] border-gray-500' : isFirstCol && minFret > 1 ? 'border-l border-gray-700' : ''} ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
                       style={!fullScale ? { width: cellWidth } : undefined}
                     >
+                      {/* Inactive/background scale notes */}
+                      {hasExtra && !hasNote && (
+                        <div
+                          className={`
+                            rounded-full z-0 box-border w-3 h-3
+                            ${isRoot ? 'bg-bg-secondary border-2 border-slate-700' : 'bg-slate-700'}
+                          `}
+                        />
+                      )}
+                      {/* Active/position notes on top */}
                       {hasNote && (
                         <div
                           className={`

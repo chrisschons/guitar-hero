@@ -60,6 +60,9 @@ const A_PENTATONIC_PITCHES: PitchSet = new Set(
 const A_BLUES_PITCHES: PitchSet = new Set(
   [0, 3, 5, 6, 7, 10].map((i) => (i + (ROOT_SEMITONE_A ?? 9)) % 12)
 );
+const A_MINOR_FULL_NOTES: [number, number][] = fullFretboardScaleNotes(
+  minorPitchSet(ROOT_SEMITONE_A)
+);
 
 export function Scales() {
   const [rootId, setRootId] = useLocalStorage('guitar-hero-debug-root', 'C');
@@ -74,6 +77,7 @@ export function Scales() {
   const majorOrder = get3NPSStartingOrder(rootSemitone, 'major');
   const minorOrder = get3NPSStartingOrder(rootSemitone, 'minor');
   const majorFirstSevenNotes = getMajorFirstNPositionNotes(rootSemitone, 7).flat();
+  const minorFirstSevenNotes = minorPositions.flat();
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary relative">
@@ -100,7 +104,7 @@ export function Scales() {
         </div>
       </header>
 
-      <div className="flex-1 p-6 max-w-6xl mx-auto w-full">
+      <div className="flex-1 p-6  mx-auto w-full">
         <section className="mb-4">
           <button
             type="button"
@@ -163,17 +167,7 @@ export function Scales() {
           <h2 className="text-xl font-semibold text-text-primary mb-3">
             {rootId} Major 3NPS
           </h2>
-          {majorPositions.length > 0 && (
-            <p className="text-[10px] text-text-secondary mb-1">
-              {majorPositions.map((notes, idx) => {
-                const canonicalIndex = majorOrder[idx] ?? idx;
-                const anchor = getLowEAnchor(notes as [number, number][]);
-                return `box ${idx + 1}: p${canonicalIndex + 1}, f${anchor ?? '-'}${
-                  idx < majorPositions.length - 1 ? ' • ' : ''
-                }`;
-              })}
-            </p>
-          )}
+         
           <p className="text-xs text-text-secondary mb-2">
             Full fretboard, then positions ordered by lowest fret (closest to nut first). Root
             highlighted. Labels remain canonical (Position 1–7).
@@ -189,6 +183,7 @@ export function Scales() {
           <div className="mb-4">
             <PositionDiagram
               notes={majorFirstSevenNotes}
+              extraNotes={majorFullNotes}
               title={`${rootId} major 3NPS — positions 1–7 (neutral shapes)`}
               fullScale
               rootSemitone={rootSemitone}
@@ -201,6 +196,7 @@ export function Scales() {
                 <PositionDiagram
                   key={idx}
                   notes={notes}
+                  extraNotes={majorFullNotes}
                   title={`Position ${canonicalIndex + 1}`}
                   rootSemitone={rootSemitone}
                 />
@@ -214,13 +210,22 @@ export function Scales() {
             {rootId} natural minor 3NPS
           </h2>
           <p className="text-xs text-text-secondary mb-2">
-            Derived from major (b3). Full fretboard, then positions in fretboard order. Root
-            highlighted.
+            Derived from major (b3). Full fretboard, then a continuous run of positions 1–7, then
+            positions in fretboard order. Root highlighted.
           </p>
           <div className="mb-4">
             <PositionDiagram
               notes={minorFullNotes}
               title={`${rootId} natural minor 3NPS — full fretboard`}
+              fullScale
+              rootSemitone={rootSemitone}
+            />
+          </div>
+          <div className="mb-4">
+            <PositionDiagram
+              notes={minorFirstSevenNotes}
+              extraNotes={minorFullNotes}
+              title={`${rootId} natural minor 3NPS — positions 1–7`}
               fullScale
               rootSemitone={rootSemitone}
             />
@@ -232,6 +237,7 @@ export function Scales() {
                 <PositionDiagram
                   key={idx}
                   notes={notes}
+                  extraNotes={minorFullNotes}
                   title={`Position ${canonicalIndex + 1}`}
                   rootSemitone={rootSemitone}
                 />
@@ -248,6 +254,7 @@ export function Scales() {
           <div className="mb-4">
             <PositionDiagram
               notes={fullFretboardScaleNotes(A_PENTATONIC_PITCHES)}
+              extraNotes={A_MINOR_FULL_NOTES}
               title="A minor pentatonic — full fretboard"
               fullScale
               rootSemitone={ROOT_SEMITONE_A}
@@ -258,6 +265,7 @@ export function Scales() {
               <PositionDiagram
                 key={idx}
                 notes={notes}
+                extraNotes={A_MINOR_FULL_NOTES}
                 title={`Position ${idx + 1}`}
                 rootSemitone={ROOT_SEMITONE_A}
               />
@@ -273,6 +281,7 @@ export function Scales() {
           <div className="mb-4">
             <PositionDiagram
               notes={fullFretboardScaleNotes(A_BLUES_PITCHES)}
+              extraNotes={A_MINOR_FULL_NOTES}
               title="A blues — full fretboard"
               fullScale
               rootSemitone={ROOT_SEMITONE_A}
@@ -283,6 +292,7 @@ export function Scales() {
               <PositionDiagram
                 key={idx}
                 notes={notes}
+                extraNotes={A_MINOR_FULL_NOTES}
                 title={`Position ${idx + 1}`}
                 rootSemitone={ROOT_SEMITONE_A}
               />

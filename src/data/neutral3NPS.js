@@ -54,12 +54,22 @@ export const MAJOR_START_FRET = {
   0: 0, 1: 1, 2: 0, 3: 1, 4: 0, 5: 1, 6: 2, 7: 3, 8: 4, 9: 5, 10: 6, 11: 7,
 };
 
+// Minor: starting position (1–7 → index 0–6) and starting fret per key. ref lines 16–28
+export const MINOR_START_POSITION_INDEX = {
+  0: 3, 1: 2, 2: 1, 3: 1, 4: 0, 5: 0, 6: 6, 7: 6, 8: 5, 9: 4, 10: 4, 11: 3,
+};
+export const MINOR_START_FRET = {
+  0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 1, 6: 0, 7: 0, 8: 0, 9: 0, 10: 1, 11: 0,
+};
+
 /**
  * Convert a neutral shape + starting fret to [stringIndex, fret] notes (0–23).
  */
 export function shapeToNotes(shape, startFret) {
   const notes = [];
-  for (let stringIndex = 0; stringIndex < 6; stringIndex += 1) {
+  // Iterate from low E (5) up to high e (0) so ascending patterns
+  // start on low strings in tab/exercise views.
+  for (let stringIndex = 5; stringIndex >= 0; stringIndex -= 1) {
     const offsets = shape[stringIndex] || [];
     for (let i = 0; i < offsets.length; i += 1) {
       const fret = startFret + offsets[i];
@@ -106,15 +116,14 @@ export function getMajorFirstTwoPositionNotes(rootSemitone) {
 }
 
 /**
- * Notes for the first N positions (in display order) for major key.
- * Uses only the interval array: start at (positionIndex, startFret) for the key,
- * then step through MAJOR_POSITION_OFFSETS for each next position. No manual overrides.
- * Returns array of N note arrays, each [stringIndex, fret][].
+ * Notes for the first N positions in display order.
+ * Uses interval loop: start at (startIndexMap[pc], startFretMap[pc]), then step
+ * MAJOR_POSITION_OFFSETS for each next position. Same logic for major and minor.
  */
-export function getMajorFirstNPositionNotes(rootSemitone, n) {
+export function getFirstNPositionNotes(rootSemitone, n, startIndexMap, startFretMap) {
   const pc = ((rootSemitone % 12) + 12) % 12;
-  const startIndex = MAJOR_START_POSITION_INDEX[pc] ?? 0;
-  let startFret = MAJOR_START_FRET[pc] ?? 0;
+  const startIndex = startIndexMap[pc] ?? 0;
+  let startFret = startFretMap[pc] ?? 0;
   const result = [];
   for (let i = 0; i < n; i += 1) {
     const posIndex = (startIndex + i) % 7;
@@ -123,4 +132,16 @@ export function getMajorFirstNPositionNotes(rootSemitone, n) {
     startFret += MAJOR_POSITION_OFFSETS[posIndex] ?? 0;
   }
   return result;
+}
+
+/**
+ * Notes for the first N positions (in display order) for major key.
+ */
+export function getMajorFirstNPositionNotes(rootSemitone, n) {
+  return getFirstNPositionNotes(
+    rootSemitone,
+    n,
+    MAJOR_START_POSITION_INDEX,
+    MAJOR_START_FRET
+  );
 }

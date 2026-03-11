@@ -6,7 +6,7 @@
 
 import { getNoteAt } from '../core/music';
 import { STANDARD_TUNING } from './tunings';
-import { getMajorFirstNPositionNotes } from './neutral3NPS';
+import { getMajorFirstNPositionNotes, getFirstNPositionNotes, MINOR_START_POSITION_INDEX, MINOR_START_FRET as NEUTRAL_MINOR_START_FRET } from './neutral3NPS';
 
 // —— C major 3NPS (7 positions) ———
 // Order: Position 1 .. 7 so positionIndex 0 = Position 1, etc.
@@ -84,23 +84,6 @@ const MAJOR_START_FRET = {
   11: 7, // B f7
 };
 
-// Minor defaults from ref/scale-position-default.txt
-// c pos4, c# pos3, d pos2, d# pos2, e pos1, f pos1, f# pos7, g pos7, g# pos6, a pos5, a# pos5, b pos4
-const MINOR_START_INDEX = {
-  0: 3, // C
-  1: 2, // C#
-  2: 1, // D
-  3: 1, // D#
-  4: 0, // E
-  5: 0, // F
-  6: 6, // F#
-  7: 6, // G
-  8: 5, // G#
-  9: 4, // A
-  10: 4, // A#
-  11: 3, // B
-};
-
 /** Flatten 3rd, 6th, 7th of the scale relative to root (for natural minor). */
 function majorToMinor(notes, rootSemitone, tuning = STANDARD_TUNING) {
   return notes.map(([stringIndex, fret]) => {
@@ -124,10 +107,17 @@ export function getMajor3NPSPositions(rootSemitone) {
 }
 
 /**
- * Natural minor 3NPS positions for a given root. Derived from major (b3, b6, b7).
+ * Natural minor 3NPS positions for a given root. Same interval loop as major but
+ * with minor start position/fret from ref; each position's notes are minorized (b3, b6, b7).
  */
 export function getMinor3NPSPositions(rootSemitone, tuning = STANDARD_TUNING) {
-  return getMajor3NPSPositions(rootSemitone).map((pos) =>
+  const positionsInMinorOrder = getFirstNPositionNotes(
+    rootSemitone,
+    7,
+    MINOR_START_POSITION_INDEX,
+    NEUTRAL_MINOR_START_FRET
+  );
+  return positionsInMinorOrder.map((pos) =>
     majorToMinor(pos, rootSemitone, tuning)
   );
 }
@@ -147,7 +137,7 @@ export function get3NPSStartingOrder(rootSemitone, scaleType = 'major') {
 
   const start =
     scaleType === 'minor'
-      ? (MINOR_START_INDEX[pc] ?? 0)
+      ? (MINOR_START_POSITION_INDEX[pc] ?? 0)
       : (MAJOR_START_INDEX[pc] ?? 0);
 
   const order = [];
