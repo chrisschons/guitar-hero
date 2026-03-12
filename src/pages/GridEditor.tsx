@@ -18,11 +18,11 @@ import {
   updateNoteFretAtSlot,
   createNotesInSelection,
   deleteSelectionFromNotes,
-  resizeNoteDuration,
   moveNotes,
   combineDurationInSelection,
   splitDurationToNotes,
 } from '../core/gridEditorModel';
+import { applyDurationResizeToNotes } from '../core/riffGrid';
 
 const COLUMN_WIDTH = 48;
 const ROW_HEIGHT = 32;
@@ -199,9 +199,8 @@ export function GridEditor() {
         suppressClickRef.current = false;
         return;
       }
-      if (!e.shiftKey) return;
-      const key = cellKey(stringIndex, slotIndex);
-      if (anchor != null) {
+      if (e.shiftKey && anchor != null) {
+        // Shift+click: extend rectangular selection from anchor to this cell
         const minS = Math.min(anchor.stringIndex, stringIndex);
         const maxS = Math.max(anchor.stringIndex, stringIndex);
         const minSlot = Math.min(anchor.slotIndex, slotIndex);
@@ -211,9 +210,17 @@ export function GridEditor() {
           for (let slot = minSlot; slot <= maxSlot; slot += 1) next.add(cellKey(s, slot));
         }
         setSelection(next);
-      } else {
-        setSelection(new Set([key]));
-        setAnchor({ stringIndex, slotIndex });
+        return;
+      }
+
+      // Regular click anywhere in the cell (no shift):
+      // keep whatever selection was established by mousedown (note span etc),
+      // just focus the cell's input so typing works immediately.
+      const inputId = `grid-editor-cell-${stringIndex}-${slotIndex}`;
+      const el = document.getElementById(inputId) as HTMLInputElement | null;
+      if (el) {
+        el.focus();
+        el.select?.();
       }
     },
     [anchor]
@@ -244,18 +251,28 @@ export function GridEditor() {
           if (!Number.isFinite(s) || !Number.isFinite(col)) return false;
           return !!editorGrid[s]?.[col];
         });
-      if (kind === 'resize-right' && cell) {
+
+      if ((kind === 'resize-right' || kind === 'resize-left') && cell) {
+        // Begin a duration resize from either edge of the note.
+        // Anchor at the true start/end of the note span so the preview and
+        // final resize use the correct edge, even if the click is near it.
+        const row = editorGrid[stringIndex] ?? [];
+        let startSlot = slotIndex;
+        let endSlot = slotIndex;
+        while (startSlot - 1 >= 0 && row[startSlot - 1]?.noteId === cell.noteId) startSlot -= 1;
+        while (endSlot + 1 < totalColumns && row[endSlot + 1]?.noteId === cell.noteId) endSlot += 1;
+        const anchorSlot = kind === 'resize-right' ? endSlot : startSlot;
+
         setDragGhost(null);
         setDragState({
           mode: 'resize',
           stringIndex,
           noteId: cell.noteId,
-          anchorSlot: slotIndex,
-          currentSlot: slotIndex,
+          anchorSlot,
+          currentSlot: anchorSlot,
         });
         return;
       }
-      if (kind === 'resize-left') return;
       // If current selection (containing any notes) includes this cellKey,
       // start a move drag for the whole selection, even if this cell is empty.
       if (kind === 'cell' && selection.size > 0 && selection.has(key) && hasNotesInSelection) {
@@ -292,7 +309,7 @@ export function GridEditor() {
         setAnchor({ stringIndex, slotIndex });
       }
     },
-    [editorGrid, selection]
+    [editorGrid, selection, totalColumns]
   );
 
   const handleMouseEnter = useCallback(
@@ -323,14 +340,22 @@ export function GridEditor() {
         }
       } else if (dragState.mode === 'resize' && riff) {
         pushHistory(riff);
-        const newNotes = resizeNoteDuration(riff, riff.notes ?? [], dragState.noteId, slotIndex);
+        const { notes: newNotes } = applyDurationResizeToNotes(
+          riff,
+          riff.notes ?? [],
+          dragState.stringIndex,
+          dragState.anchorSlot,
+          dragState.currentSlot,
+          totalColumns
+        );
         setRiffState({ ...riff, notes: newNotes });
+        setSelection(new Set());
         suppressClickRef.current = true;
       }
       setDragState(null);
       setDragGhost(null);
     },
-    [dragState, riff, selection, pushHistory]
+    [dragState, riff, selection, pushHistory, totalColumns]
   );
 
   useEffect(() => {
@@ -705,24 +730,41 @@ export function GridEditor() {
                       }
 
                       const row = editorGrid[s] ?? [];
+                      const prevCellInRow = row[col - 1];
                       const nextCellInRow = row[col + 1];
-                      const isEndOfDurationRun =
-                        !cell || !nextCellInRow || nextCellInRow.noteId !== cell.noteId;
-                      const isStartOfDurationRun = cell?.isNoteStart ?? false;
+                      const sameLeft = !!cell && !!prevCellInRow && prevCellInRow.noteId === cell.noteId;
+                      const sameRight = !!cell && !!nextCellInRow && nextCellInRow.noteId === cell.noteId;
+
                       // Internal padding: 2px. Remove on connecting sides so duration groups stay visually connected.
+                      // IMPORTANT: set individual paddings explicitly so React overwrites previous values
+                      // (otherwise old left/right=0 from a former duration group can linger after split).
                       const pad = 3;
                       const cellPadding: React.CSSProperties = {
-                        padding: pad,
-                        ...(cell && isStartOfDurationRun && !isEndOfDurationRun ? { paddingRight: 0 } : {}),
-                        ...(cell && isEndOfDurationRun && !isStartOfDurationRun ? { paddingLeft: 0 } : {}),
-                        ...(cell && !isStartOfDurationRun && !isEndOfDurationRun ? { paddingLeft: 0, paddingRight: 0 } : {}),
+                        paddingTop: pad,
+                        paddingBottom: pad,
+                        paddingLeft: pad,
+                        paddingRight: pad,
                       };
+                      if (cell) {
+                        if (!sameLeft && sameRight) {
+                          // start of run
+                          cellPadding.paddingRight = 0;
+                        } else if (sameLeft && !sameRight) {
+                          // end of run
+                          cellPadding.paddingLeft = 0;
+                        } else if (sameLeft && sameRight) {
+                          // middle of run
+                          cellPadding.paddingLeft = 0;
+                          cellPadding.paddingRight = 0;
+                        }
+                      }
+
                       const innerRounded =
-                        !cell || (isStartOfDurationRun && isEndOfDurationRun)
+                        !cell || (!sameLeft && !sameRight)
                           ? 'rounded-md'
-                          : isStartOfDurationRun
+                          : !sameLeft && sameRight
                           ? 'rounded-l-md'
-                          : isEndOfDurationRun
+                          : sameLeft && !sameRight
                           ? 'rounded-r-md'
                           : '';
 
@@ -739,6 +781,8 @@ export function GridEditor() {
                           }}
                           onMouseLeave={() => setHoverCell(null)}
                           onMouseUp={() => handleMouseUp(s, col)}
+                          onClick={(e) => handleCellClick(e, s, col)}
+                          onDoubleClick={() => handleCellDoubleClick(s, col)}
                         >
                           <div
                             className={`cell-inner min-h-[28px] w-full relative box-border border-2 border-transparent ${innerRounded} ${
@@ -760,7 +804,10 @@ export function GridEditor() {
                           {cell && (
                             <>
                               {cell.isNoteStart && (
-                                <div className="absolute left-0 top-0 bottom-0 w-1.5 cursor-default z-10" />
+                                <div
+                                  className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10"
+                                  onMouseDown={(ev) => handleMouseDown(ev, s, col, 'resize-left')}
+                                />
                               )}
                               {(() => {
                                 const nextCell = row[col + 1];
@@ -780,8 +827,6 @@ export function GridEditor() {
                               if ((e.target as HTMLElement).closest('input')) return;
                               handleMouseDown(e, s, col, 'cell');
                             }}
-                            onClick={(e) => handleCellClick(e, s, col)}
-                            onDoubleClick={() => handleCellDoubleClick(s, col)}
                           >
                             <input
                               id={`grid-editor-cell-${s}-${col}`}
