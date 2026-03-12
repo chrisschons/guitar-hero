@@ -24,6 +24,12 @@ export type TuningId = string;
 
 export type NoteEvent = {
   /**
+   * Optional stable id for editor (e.g. selection, resize by note).
+   * Grid editor generates if missing.
+   */
+  id?: string;
+
+  /**
    * String index, 1 = highest string, 6 = lowest.
    */
   string: number;

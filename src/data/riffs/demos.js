@@ -3,7 +3,7 @@
  * 16th-note grid: 4/4 → 16 subdivisions/bar, 6/8 → 16 (from time signature).
  */
 
-/** @typedef {import('./gallops.js').Riff} Riff */
+/** @typedef {import('../../types/riff').Riff} Riff */
 
 /** 4/4 demo — 16 subdivisions per bar on low E, 2 bars. */
 export const demo44Riff = /** @type {Riff} */ ({

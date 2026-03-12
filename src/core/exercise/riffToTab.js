@@ -29,7 +29,7 @@ export function getSubdivisionsPerBeat(timeSignature) {
  * Note format (1-based for editing): string 1–6 (1=high e, 6=low E), bar 1+, subdivision 1+ (slot within the bar).
  * Subdivisions per bar from getSubdivisionsPerBar(timeSignature). slot (0-based) = (bar - 1) * subdivisionsPerBar + (subdivision - 1).
  *
- * @param {import('../../data/riffs/gallops.js').Riff} riff
+ * @param {import('../../types/riff').Riff} riff
  * @returns {(number | null)[][]} tab
  */
 export function riffToTab(riff) {
@@ -42,8 +42,10 @@ export function riffToTab(riff) {
   for (const n of notes) {
     const bar = n.bar >= 1 ? n.bar : 1;
     const sub = n.subdivision >= 1 ? n.subdivision : 1;
-    const slot = (bar - 1) * subdivisionsPerBar + (sub - 1);
-    if (slot > maxSlot) maxSlot = slot;
+    const duration = n.durationSubdivisions && n.durationSubdivisions > 0 ? n.durationSubdivisions : 1;
+    const startSlot = (bar - 1) * subdivisionsPerBar + (sub - 1);
+    const endSlot = startSlot + duration - 1;
+    if (endSlot > maxSlot) maxSlot = endSlot;
   }
 
   const numColumns = maxSlot + 1;
@@ -54,9 +56,13 @@ export function riffToTab(riff) {
     const bar = n.bar >= 1 ? n.bar : 1;
     const sub = n.subdivision >= 1 ? n.subdivision : 1;
     const stringIndex = Math.max(0, Math.min(5, n.string >= 1 ? n.string - 1 : 5));
-    const slot = (bar - 1) * subdivisionsPerBar + (sub - 1);
-    if (slot >= 0 && slot < numColumns) {
-      tab[slot][stringIndex] = n.fret;
+    const duration = n.durationSubdivisions && n.durationSubdivisions > 0 ? n.durationSubdivisions : 1;
+    const startSlot = (bar - 1) * subdivisionsPerBar + (sub - 1);
+    const endSlot = Math.min(numColumns - 1, startSlot + duration - 1);
+    for (let slot = startSlot; slot <= endSlot; slot += 1) {
+      if (slot >= 0 && slot < numColumns) {
+        tab[slot][stringIndex] = n.fret;
+      }
     }
   }
 

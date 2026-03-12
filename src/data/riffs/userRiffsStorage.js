@@ -25,8 +25,15 @@ export function loadUserRiffs() {
  * @param {Riff} riff
  */
 export function saveUserRiff(riff) {
+  const now = new Date().toISOString();
+  const meta = {
+    ...riff.metadata,
+    modifiedAt: now,
+  };
+  if (!meta.createdAt) meta.createdAt = now;
+  const toSave = { ...riff, metadata: meta };
   const riffs = loadUserRiffs();
-  riffs[riff.id] = { ...riff };
+  riffs[riff.id] = toSave;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(riffs));
 }
 

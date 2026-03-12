@@ -377,6 +377,12 @@ function App() {
               Riff Editor
             </a>
             <a
+              href="#/grid-editor"
+              className="text-accent hover:text-accent-light transition-colors"
+            >
+              Grid Editor
+            </a>
+            <a
               href="#/bravura-demo"
               className="text-accent hover:text-accent-light transition-colors"
             >
