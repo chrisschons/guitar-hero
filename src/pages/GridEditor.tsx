@@ -208,12 +208,18 @@ export function GridEditor() {
 
       // Regular click anywhere in the cell (no shift):
       // keep whatever selection was established by mousedown (note span etc),
-      // just focus the cell's input so typing works immediately.
+      // just focus the cell's input so typing works immediately, without
+      // showing a full text selection highlight.
       const inputId = `grid-editor-cell-${stringIndex}-${slotIndex}`;
       const el = document.getElementById(inputId) as HTMLInputElement | null;
       if (el) {
         el.focus();
-        el.select?.();
+        const len = el.value.length;
+        try {
+          el.setSelectionRange?.(len, len);
+        } catch {
+          // setSelectionRange may throw on some input types; ignore.
+        }
       }
     },
     [anchor]
@@ -255,6 +261,15 @@ export function GridEditor() {
         while (startSlot - 1 >= 0 && row[startSlot - 1]?.noteId === cell.noteId) startSlot -= 1;
         while (endSlot + 1 < totalColumns && row[endSlot + 1]?.noteId === cell.noteId) endSlot += 1;
         const anchorSlot = kind === 'resize-right' ? endSlot : startSlot;
+
+        // Ensure the full duration group is selected when interacting with
+        // the resize handle so edits and keyboard input target this group.
+        const nextSel = new Set<string>();
+        for (let slot = startSlot; slot <= endSlot; slot += 1) {
+          nextSel.add(cellKey(stringIndex, slot));
+        }
+        setSelection(nextSel);
+        setAnchor({ stringIndex, slotIndex: startSlot });
 
         setDragGhost(null);
         setDragState({
@@ -327,8 +342,16 @@ export function GridEditor() {
         const deltaSlot = slotIndex - dragState.anchor.slotIndex;
         if ((deltaString !== 0 || deltaSlot !== 0) && riff && selection.size > 0) {
           pushHistory(riff);
-          const { notes: newNotes } = moveNotes(riff, riff.notes ?? [], selection, deltaString, deltaSlot);
+          const { notes: newNotes } = moveNotes(
+            riff,
+            riff.notes ?? [],
+            selection,
+            deltaString,
+            deltaSlot
+          );
           setRiffState({ ...riff, notes: newNotes });
+          // After a drag-and-drop, return to an unselected state so the user
+          // can clearly see the result and start a fresh interaction.
           setSelection(new Set());
         }
       } else if (dragState.mode === 'resize' && riff) {
@@ -342,6 +365,7 @@ export function GridEditor() {
           totalColumns
         );
         setRiffState({ ...riff, notes: newNotes });
+        // After resizing a duration group, clear selection to reset visual state.
         setSelection(new Set());
         suppressClickRef.current = true;
       }
@@ -737,10 +761,7 @@ export function GridEditor() {
                       const hasSelectedTop = s > 0 && selection.has(cellKey(s - 1, col));
                       const hasSelectedBottom = s < NUM_STRINGS - 1 && selection.has(cellKey(s + 1, col));
                       // Selection: color-only highlight (no borders/shadows)
-                      const selectionColorClass =
-                        isSelected
-                          ? 'bg-white/10'
-                          : '';
+                      const selectionColorClass = isSelected ? 'bg-blue-500 text-primary-foreground' : '';
                       const isChord = chordCells.has(key);
                       const isDuration = cell && !cell.isNoteStart;
                       const isDropTarget =
@@ -910,30 +931,24 @@ export function GridEditor() {
                         >
                           <div
                             className={`cell-inner min-h-[28px] w-full h-full relative box-border border-2 border-transparent ${innerRounded} ${
-                              isResizePreview ? 'bg-primary text-primary-foreground cursor-col-resize' : ''
-                            } ${
-                              !isResizePreview &&
-                              (isHoverGroup || isHoverSingle) &&
-                              (cell
-                                ? 'bg-[#b83a50] text-primary-foreground border-accent'
-                                : 'bg-primary/20 border-primary')
-                            } ${
-                              !isResizePreview &&
-                              !isHoverGroup &&
-                              !isHoverSingle &&
-                              isChord
-                                ? 'bg-emerald-700'
-                                : ''
-                            } ${
-                              !isResizePreview &&
-                              !isHoverGroup &&
-                              !isHoverSingle &&
-                              !isChord &&
-                              cell &&
-                              !(dragState?.mode === 'resize' && dragState.stringIndex === s && isInResizeRun)
-                                ? 'bg-primary text-primary-foreground'
-                                : ''
-                            } ${!isResizePreview && selectionColorClass} ${isBeingDragged ? 'opacity-0' : ''}`}
+                              // 1) Active resize preview always wins
+                              isResizePreview
+                                ? 'bg-primary text-primary-foreground cursor-col-resize'
+                                : // 2) Otherwise, persistent selection color wins
+                                selectionColorClass ||
+                                  // 3) Then hover states for non-selected cells
+                                  ((isHoverGroup || isHoverSingle) &&
+                                  (cell
+                                    ? 'bg-[#b83a50] text-primary-foreground border-accent'
+                                    : 'bg-primary/20 border-primary')) ||
+                                  // 4) Then chord styling
+                                  (isChord ? 'bg-emerald-700' : '') ||
+                                  // 5) Finally, base note styling for non-selected, non-hover, non-chord cells
+                                  (cell &&
+                                  !(dragState?.mode === 'resize' && dragState.stringIndex === s && isInResizeRun)
+                                    ? 'bg-primary text-primary-foreground'
+                                    : '')
+                            } ${isBeingDragged ? 'opacity-0' : ''}`}
                           >
                             {cell && (
                               <>
@@ -1050,7 +1065,7 @@ export function GridEditor() {
               };
               return (
                 <div
-                  className="pointer-events-none absolute z-20 box-border rounded-md bg-violet-500/80 shadow-lg"
+                  className="pointer-events-none absolute z-20 box-border rounded-md bg-blue-500/60 shadow-lg"
                   style={ghostStyle}
                 />
               );
