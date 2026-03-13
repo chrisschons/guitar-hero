@@ -16,7 +16,7 @@
  *   id: string,
  *   name: string,
  *   timeSignature: TimeSignature,
- *   bpmRange: { min: number, max: number },
+ *   tempo?: number,
  *   notes: RiffNote[],
  *   style: string
  * }} Riff
@@ -27,7 +27,7 @@ export const subdivisionDemoRiff = /** @type {Riff} */ ({
   id: 'subdivision-demo',
   name: 'Subdivision demo (whole, 8th, triplet, 16th)',
   timeSignature: { num: 4, denom: 4 },
-  bpmRange: { min: 60, max: 100 },
+  tempo: 60,
   style: 'gallop',
   notes: [
     // Bar 1: whole note — sub 1
@@ -82,7 +82,7 @@ export const gallopRiff = /** @type {Riff} */ ({
   id: 'gallop-simple',
   name: 'Simple Gallop',
   timeSignature: { num: 4, denom: 4 },
-  bpmRange: { min: 90, max: 140 },
+  tempo: 90,
   style: 'gallop',
   notes: [
     { string: 6, fret: 0, bar: 1, subdivision: 1 },
@@ -101,7 +101,7 @@ export const alternatePickingRiff = /** @type {Riff} */ ({
   id: 'alt-pick-1',
   name: 'Alternate Picking (A minor pentatonic)',
   timeSignature: { num: 4, denom: 4 },
-  bpmRange: { min: 80, max: 120 },
+  tempo: 80,
   style: 'alternatePicking',
   notes: [
     { string: 6, fret: 5, bar: 1, subdivision: 1 },
@@ -128,7 +128,7 @@ export const gallopBeginnerRiff = /** @type {Riff} */ ({
   id: 'gallop-beginner',
   name: 'Gallop Rhythm (Beginner) — Open E',
   timeSignature: { num: 4, denom: 4 },
-  bpmRange: { min: 70, max: 100 },
+  tempo: 70,
   style: 'gallop',
   notes: [1, 2, 3, 4, 5, 6, 7, 8].flatMap((b) => gallopPattern16(b, 0)),
 });
@@ -138,7 +138,7 @@ export const gallopIntermediateRiff = /** @type {Riff} */ ({
   id: 'gallop-intermediate',
   name: 'Gallop Rhythm (Intermediate) — E to A',
   timeSignature: { num: 4, denom: 4 },
-  bpmRange: { min: 85, max: 115 },
+  tempo: 85,
   style: 'gallop',
   notes: [
     ...([1, 2, 3, 4].flatMap((b) => gallopPattern16(b, 0))),
@@ -171,7 +171,7 @@ export const powerChordBeginnerRiff = /** @type {Riff} */ ({
   id: 'power-chord-beginner',
   name: 'Power Chords (Beginner) — E A E B',
   timeSignature: { num: 4, denom: 4 },
-  bpmRange: { min: 60, max: 90 },
+  tempo: 60,
   style: 'powerChord',
   notes: [
     ...[1, 2].flatMap((b) => [1, 5, 9, 13].flatMap((s) => powerChordE5(b, s))),
@@ -186,7 +186,7 @@ export const powerChordIntermediateRiff = /** @type {Riff} */ ({
   id: 'power-chord-intermediate',
   name: 'Power Chords (Intermediate) — E A E B, 8ths',
   timeSignature: { num: 4, denom: 4 },
-  bpmRange: { min: 70, max: 100 },
+  tempo: 70,
   style: 'powerChord',
   notes: [
     ...[1, 2].flatMap((b) => [1, 3, 5, 7, 9, 11, 13, 15].flatMap((s) => powerChordE5(b, s))),

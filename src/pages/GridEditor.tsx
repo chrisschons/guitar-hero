@@ -34,11 +34,7 @@ function defaultRiff(id: string, name = 'New riff'): Riff {
     name,
     timeSignature: { num: 4, denom: 4 },
     tempo: 100,
-    bpmRange: { min: 60, max: 120 },
     lengthBars: 8,
-    tuningId: 'standard',
-    key: 'A',
-    scale: 'pentatonic',
     style: 'user',
     notes: [],
   };
@@ -119,13 +115,10 @@ export function GridEditor() {
     if (riffId) {
       const r = getRiff(riffId);
       if (r) {
-        const normalized = {
+        const normalized: Riff = {
           ...r,
           lengthBars: r.lengthBars ?? 8,
-          tempo: r.tempo ?? r.bpmRange?.min ?? 100,
-          tuningId: r.tuningId ?? 'standard',
-          key: r.key ?? 'A',
-          scale: r.scale ?? 'pentatonic',
+          tempo: r.tempo ?? 100,
         };
         setRiffState(normalized);
       } else setRiffState(null);
@@ -646,33 +639,96 @@ export function GridEditor() {
       <main className="flex-1 p-4 overflow-auto">
         <div className="flex flex-col gap-4">
           <ContextMenu>
-            <ContextMenuTrigger asChild>
+            <ContextMenuTrigger>
               <div
                 ref={gridRootRef}
                 className="relative rounded border border-bg-tertiary overflow-x-auto"
                 style={{ maxWidth: '100%' }}
                 data-grid-editor="grid"
               >
-            <table className="border-collapse table-fixed text-sm">
-              <thead>
-                <tr>
-                  <th className="w-8 p-1 text-left text-text-secondary font-normal">Str</th>
-                  {Array.from({ length: totalColumns }, (_, i) => (
-                    <th
-                      key={i}
-                      className="p-0.5 text-center text-text-secondary font-normal border border-bg-tertiary/40"
-                      style={{ width: COLUMN_WIDTH, minWidth: COLUMN_WIDTH }}
+                {/* Header row: string label + bar numbers */}
+                <div className="flex border-b border-bg-tertiary/60 text-sm">
+                  <div className="w-8 shrink-0 p-1 text-left text-text-secondary font-normal">Str</div>
+                  <div
+                    className="flex"
+                    style={{
+                      width: totalColumns * COLUMN_WIDTH,
+                    }}
+                  >
+                    {Array.from({ length: totalColumns }, (_, i) => (
+                      <div
+                        key={i}
+                        className="p-0.5 text-center text-text-secondary font-normal border border-bg-tertiary/40"
+                        style={{ width: COLUMN_WIDTH, minWidth: COLUMN_WIDTH }}
+                      >
+                        {i % subsPerBar === 0 ? Math.floor(i / subsPerBar) + 1 : ''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Grid body: string labels + CSS grid of cells */}
+                <div className="flex text-sm">
+                  {/* String labels column */}
+                  <div className="flex flex-col">
+                    {Array.from({ length: NUM_STRINGS }, (_, s) => (
+                      <div
+                        key={s}
+                        className="w-8 shrink-0 p-1 text-text-secondary"
+                        style={{ height: ROW_HEIGHT }}
+                      >
+                        {s + 1}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Cells grid */}
+                  <div
+                    className="relative"
+                    style={{
+                      width: totalColumns * COLUMN_WIDTH,
+                    }}
+                  >
+                    {/* Subtle full-row drop highlight while actively dragging notes */}
+                    {dragState?.mode === 'move' &&
+                      (dragState.current.stringIndex !== dragState.anchor.stringIndex ||
+                        dragState.current.slotIndex !== dragState.anchor.slotIndex) &&
+                      Array.from({ length: NUM_STRINGS }, (_, s) => {
+                        const a = dragState.anchor;
+                        const c = dragState.current;
+                        const deltaS = c.stringIndex - a.stringIndex;
+                        let isDropRow = false;
+                        for (const k of selection) {
+                          const [ks] = k.split('-').map(Number);
+                          if (!Number.isFinite(ks)) continue;
+                          if (ks + deltaS === s) {
+                            isDropRow = true;
+                            break;
+                          }
+                        }
+                        if (!isDropRow) return null;
+                        return (
+                          <div
+                            key={`drop-row-${s}`}
+                            className="pointer-events-none absolute left-0 bg-emerald-400/10"
+                            style={{
+                              top: s * ROW_HEIGHT,
+                              height: ROW_HEIGHT,
+                              width: totalColumns * COLUMN_WIDTH,
+                            }}
+                          />
+                        );
+                      })}
+
+                    <div
+                      className="grid"
+                      style={{
+                        gridTemplateColumns: `repeat(${totalColumns}, ${COLUMN_WIDTH}px)`,
+                        gridAutoRows: `${ROW_HEIGHT}px`,
+                      }}
                     >
-                      {i % subsPerBar === 0 ? Math.floor(i / subsPerBar) + 1 : ''}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: NUM_STRINGS }, (_, s) => (
-                  <tr key={s}>
-                    <td className="p-1 text-text-secondary">{s + 1}</td>
-                    {Array.from({ length: totalColumns }, (_, col) => {
+                      {Array.from({ length: NUM_STRINGS }, (_, s) =>
+                        Array.from({ length: totalColumns }, (_, col) => {
                       const key = cellKey(s, col);
                       const cell = editorGrid[s]?.[col] ?? null;
                       const isSelected = selection.has(key);
@@ -680,9 +736,10 @@ export function GridEditor() {
                       const hasSelectedRight = col < totalColumns - 1 && selection.has(cellKey(s, col + 1));
                       const hasSelectedTop = s > 0 && selection.has(cellKey(s - 1, col));
                       const hasSelectedBottom = s < NUM_STRINGS - 1 && selection.has(cellKey(s + 1, col));
-                      const selectionBorderClass =
+                      // Selection: color-only highlight (no borders/shadows)
+                      const selectionColorClass =
                         isSelected
-                          ? `bg-violet-500 border-violet-400 ${hasSelectedLeft ? 'border-l-transparent ' : ''}${hasSelectedRight ? 'border-r-transparent ' : ''}${hasSelectedTop ? 'border-t-transparent ' : ''}${hasSelectedBottom ? 'border-b-transparent ' : ''}`
+                          ? 'bg-white/10'
                           : '';
                       const isChord = chordCells.has(key);
                       const isDuration = cell && !cell.isNoteStart;
@@ -699,14 +756,69 @@ export function GridEditor() {
                           }
                           return false;
                         })();
-                      const isResizePreview =
-                        dragState?.mode === 'resize' &&
-                        dragState.stringIndex === s &&
-                        (() => {
-                          const start = Math.min(dragState.anchorSlot, dragState.currentSlot);
-                          const end = Math.max(dragState.anchorSlot, dragState.currentSlot);
-                          return col >= start && col <= end;
-                        })();
+                      // Duration resize preview: derive the resulting span this cell would belong to
+                      let isResizePreview = false;
+                      let isInResizeRun = false;
+                      if (dragState?.mode === 'resize' && dragState.stringIndex === s) {
+                        const noteId = dragState.noteId;
+                        const rowForResize = editorGrid[s] ?? [];
+                        let curStart = -1;
+                        let curEnd = -1;
+                        for (let idx = 0; idx < rowForResize.length; idx += 1) {
+                          const c = rowForResize[idx];
+                          if (c && c.noteId === noteId) {
+                            if (curStart === -1) curStart = idx;
+                            curEnd = idx;
+                          } else if (curEnd !== -1) {
+                            break;
+                          }
+                        }
+                        if (curStart !== -1 && curEnd !== -1) {
+                          if (col >= curStart && col <= curEnd) {
+                            isInResizeRun = true;
+                          }
+                          const anchorSlot = dragState.anchorSlot;
+                          const targetSlot = dragState.currentSlot;
+                          const minSlot = Math.min(anchorSlot, targetSlot);
+                          const maxSlot = Math.max(anchorSlot, targetSlot);
+
+                          let spanStart: number;
+                          let spanEnd: number;
+
+                          if (curStart === curEnd) {
+                            spanStart = minSlot;
+                            spanEnd = maxSlot;
+                          } else if (anchorSlot === curStart && targetSlot >= curStart && targetSlot <= curEnd) {
+                            // Shrink from left while dragging inward, extend when dragging outward.
+                            if (targetSlot >= curStart) {
+                              const newStart = Math.min(targetSlot + 1, curEnd);
+                              spanStart = newStart;
+                              spanEnd = curEnd;
+                            } else {
+                              spanStart = minSlot;
+                              spanEnd = curEnd;
+                            }
+                          } else if (anchorSlot === curEnd && targetSlot >= curStart && targetSlot <= curEnd) {
+                            // Shrink from right while dragging inward, extend when dragging outward.
+                            if (targetSlot <= curEnd) {
+                              const newEnd = Math.max(targetSlot - 1, curStart);
+                              spanStart = curStart;
+                              spanEnd = newEnd;
+                            } else {
+                              spanStart = curStart;
+                              spanEnd = maxSlot;
+                            }
+                          } else {
+                            spanStart = Math.min(curStart, minSlot);
+                            spanEnd = Math.max(curEnd, maxSlot);
+                          }
+
+                          // Preview all cells in the resulting span on this string,
+                          // even if they are currently empty, so both shrinking and
+                          // extending the group are visible while dragging.
+                          isResizePreview = col >= spanStart && col <= spanEnd;
+                        }
+                      }
                       const isResizeDrag = dragState?.mode === 'resize';
 
                       // Hover behavior:
@@ -768,9 +880,15 @@ export function GridEditor() {
                           ? 'rounded-r-md'
                           : '';
 
+                      const isBeingDragged =
+                        dragState?.mode === 'move' &&
+                        selection.has(key) &&
+                        (dragState.current.stringIndex !== dragState.anchor.stringIndex ||
+                          dragState.current.slotIndex !== dragState.anchor.slotIndex);
+
                       return (
-                        <td
-                          key={col}
+                        <div
+                          key={`${s}-${col}`}
                           className={`relative align-top ${col % 2 === 1 ? 'bg-bg-tertiary/10' : ''} ${
                             isResizeDrag ? 'cursor-col-resize' : 'cursor-pointer'
                           }`}
@@ -781,97 +899,112 @@ export function GridEditor() {
                           }}
                           onMouseLeave={() => setHoverCell(null)}
                           onMouseUp={() => handleMouseUp(s, col)}
+                          onMouseDown={(e) => {
+                            // Let dedicated resize handles own their drags
+                            const target = e.target as HTMLElement;
+                            if (target.closest('[data-role="resize-handle"]')) return;
+                            handleMouseDown(e, s, col, 'cell');
+                          }}
                           onClick={(e) => handleCellClick(e, s, col)}
                           onDoubleClick={() => handleCellDoubleClick(s, col)}
                         >
                           <div
-                            className={`cell-inner min-h-[28px] w-full relative box-border border-2 border-transparent ${innerRounded} ${
-                              isDropTarget || isResizePreview ? 'border-emerald-400 bg-emerald-500' : ''
+                            className={`cell-inner min-h-[28px] w-full h-full relative box-border border-2 border-transparent ${innerRounded} ${
+                              isResizePreview ? 'bg-primary text-primary-foreground cursor-col-resize' : ''
                             } ${
-                              isSelected
-                                ? selectionBorderClass
-                                : (isHoverGroup || isHoverSingle)
-                                ? cell
-                                  ? 'bg-[#b83a50] text-primary-foreground border-accent'
-                                  : 'bg-primary/20 border-primary'
+                              !isResizePreview &&
+                              (isHoverGroup || isHoverSingle) &&
+                              (cell
+                                ? 'bg-[#b83a50] text-primary-foreground border-accent'
+                                : 'bg-primary/20 border-primary')
+                            } ${
+                              !isResizePreview &&
+                              !isHoverGroup &&
+                              !isHoverSingle &&
+                              isChord
+                                ? 'bg-emerald-700'
                                 : ''
                             } ${
-                              !isSelected && !(isDropTarget || isResizePreview) && !(isHoverGroup || isHoverSingle) && isChord ? 'bg-emerald-700' : ''
-                            } ${
-                              !isSelected && !(isDropTarget || isResizePreview) && !(isHoverGroup || isHoverSingle) && cell ? 'bg-primary text-primary-foreground' : ''
-                            }`}
+                              !isResizePreview &&
+                              !isHoverGroup &&
+                              !isHoverSingle &&
+                              !isChord &&
+                              cell &&
+                              !(dragState?.mode === 'resize' && dragState.stringIndex === s && isInResizeRun)
+                                ? 'bg-primary text-primary-foreground'
+                                : ''
+                            } ${!isResizePreview && selectionColorClass} ${isBeingDragged ? 'opacity-0' : ''}`}
                           >
-                          {cell && (
-                            <>
-                              {cell.isNoteStart && (
-                                <div
-                                  className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10"
-                                  onMouseDown={(ev) => handleMouseDown(ev, s, col, 'resize-left')}
-                                />
-                              )}
-                              {(() => {
-                                const nextCell = row[col + 1];
-                                const isEnd = !nextCell || nextCell.noteId !== cell.noteId;
-                                return isEnd && (cell.isNoteStart || cell.durationIndex > 0) ? (
+                            {cell && (
+                              <>
+                                {cell.isNoteStart && (
                                   <div
-                                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10"
-                                    onMouseDown={(ev) => handleMouseDown(ev, s, col, 'resize-right')}
+                                    className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10"
+                                    data-role="resize-handle"
+                                    onMouseDown={(ev) => handleMouseDown(ev, s, col, 'resize-left')}
                                   />
-                                ) : null;
-                              })()}
-                            </>
-                          )}
-                          <div
-                            className="flex items-center justify-center py-0.5"
-                            onMouseDown={(e) => {
-                              if ((e.target as HTMLElement).closest('input')) return;
-                              handleMouseDown(e, s, col, 'cell');
-                            }}
-                          >
-                            <input
-                              id={`grid-editor-cell-${s}-${col}`}
-                              type="text"
-                              inputMode="numeric"
-                              className={`w-8 text-center bg-transparent border-none rounded py-0.5 font-mono text-sm focus:outline-none cursor-pointer ${(cell || isHoverGroup || isHoverSingle) ? 'text-primary-foreground' : 'text-accent'}`}
-                              value={cell ? (cell.isNoteStart ? String(cell.fret) : '') : ''}
-                              onChange={(e) => {
-                                if (cell && !cell.isNoteStart) return;
-                                const v = e.target.value.trim();
-                                const parsed = v === '' ? null : Number(v);
-                                handleCellEdit(s, col, Number.isFinite(parsed) ? parsed : null);
-                              }}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                handleMouseDown(e as unknown as React.MouseEvent, s, col, 'cell');
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
+                                )}
+                                {(() => {
+                                  const nextCell = row[col + 1];
+                                  const isEnd = !nextCell || nextCell.noteId !== cell.noteId;
+                                  return isEnd && (cell.isNoteStart || cell.durationIndex > 0) ? (
+                                    <div
+                                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10"
+                                      data-role="resize-handle"
+                                      onMouseDown={(ev) => handleMouseDown(ev, s, col, 'resize-right')}
+                                    />
+                                  ) : null;
+                                })()}
+                              </>
+                            )}
+                            <div
+                              className="flex items-center justify-center py-0.5 h-full"
+                            >
+                              <input
+                                id={`grid-editor-cell-${s}-${col}`}
+                                type="text"
+                                inputMode="numeric"
+                                className={`w-8 text-center bg-transparent border-none rounded py-0.5 font-mono text-sm focus:outline-none cursor-pointer ${
+                                  cell || isHoverGroup || isHoverSingle ? 'text-primary-foreground' : 'text-accent'
+                                }`}
+                                value={cell ? (cell.isNoteStart ? String(cell.fret) : '') : ''}
+                                onChange={(e) => {
+                                  if (cell && !cell.isNoteStart) return;
+                                  const v = e.target.value.trim();
+                                  const parsed = v === '' ? null : Number(v);
+                                  handleCellEdit(s, col, Number.isFinite(parsed) ? parsed : null);
+                                }}
+                                onMouseDown={(e) => {
                                   e.preventDefault();
-                                  const nextString = s + 1;
-                                  if (nextString < NUM_STRINGS) {
-                                    const nextId = `grid-editor-cell-${nextString}-${col}`;
-                                    const el = document.getElementById(nextId) as HTMLInputElement | null;
-                                    if (el) {
-                                      el.focus();
-                                      el.select?.();
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const nextString = s + 1;
+                                    if (nextString < NUM_STRINGS) {
+                                      const nextId = `grid-editor-cell-${nextString}-${col}`;
+                                      const el = document.getElementById(nextId) as HTMLInputElement | null;
+                                      if (el) {
+                                        el.focus();
+                                        el.select?.();
+                                      }
+                                      setSelection(new Set([cellKey(nextString, col)]));
+                                      setAnchor({ stringIndex: nextString, slotIndex: col });
                                     }
-                                    setSelection(new Set([cellKey(nextString, col)]));
-                                    setAnchor({ stringIndex: nextString, slotIndex: col });
                                   }
-                                }
-                              }}
-                              readOnly={cell ? !cell.isNoteStart : false}
-                              tabIndex={cell && !cell.isNoteStart ? -1 : 0}
-                            />
+                                }}
+                                readOnly={cell ? !cell.isNoteStart : false}
+                                tabIndex={cell && !cell.isNoteStart ? -1 : 0}
+                              />
+                            </div>
                           </div>
-                          </div>
-                        </td>
+                        </div>
                       );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    })
+                      )}
+                    </div>
+                  </div>
+                </div>
             {(() => {
               if (!dragGhost || !dragState || dragState.mode !== 'move' || !gridRootRef.current) return null;
               const rect = gridRootRef.current.getBoundingClientRect();
@@ -917,7 +1050,7 @@ export function GridEditor() {
               };
               return (
                 <div
-                  className="pointer-events-none absolute z-20 rounded border border-emerald-400 bg-emerald-500/30 shadow-lg"
+                  className="pointer-events-none absolute z-20 box-border rounded-md bg-violet-500/80 shadow-lg"
                   style={ghostStyle}
                 />
               );

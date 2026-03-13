@@ -1,9 +1,13 @@
-import { Play, Pause, ArrowLeftToLine, Copy, Undo2, Redo2, Metronome, Download, Upload } from 'lucide-react';
+import { useState } from 'react';
+import { Play, Pause, ArrowLeftToLine, Undo2, Redo2, Metronome, Download, Upload, Trash2 } from 'lucide-react';
 import { TIME_SIGNATURES } from '../data/exerciseTypes';
-import { TUNINGS_LIST } from '../data/tunings';
-import { NOTE_NAMES } from '../core/music';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
+import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader as DialogHeaderUI, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Input } from './ui/input';
+import { deleteUserRiff } from '../data/riffs/userRiffsStorage';
 
 const BAR_OPTIONS = [2, 4, 6, 8, 12];
 
@@ -22,7 +26,7 @@ type EditorHeaderProps = {
   riffList: { id: string; name: string }[];
   onRiffIdChange: (id: string) => void;
   onRiffChange: (updater: (prev: Riff) => Riff) => void;
-  onNewRiff: () => void;
+  onNewRiff: (name: string) => void;
   isPlaying: boolean;
   onPlayToggle: () => void;
   onReset: () => void;
@@ -65,43 +69,112 @@ export function EditorHeader({
   showTabScroller,
   onShowTabScrollerChange,
 }: EditorHeaderProps) {
+  const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
+  const [newRiffName, setNewRiffName] = useState('');
   const timeSignatureId = riff.timeSignature
     ? `${riff.timeSignature.num}/${riff.timeSignature.denom}`
     : '4/4';
   const bars = riff.lengthBars ?? 8;
-  const bpm = riff.tempo ?? riff.bpmRange?.min ?? 100;
-  const minBpm = riff.bpmRange?.min ?? 40;
-  const maxBpm = riff.bpmRange?.max ?? 220;
+  const bpm = riff.tempo ?? 100;
+  const minBpm = 40;
+  const maxBpm = 220;
 
   return (
     <header className="sticky top-0 z-10 bg-bg-secondary border-b border-bg-tertiary p-3 flex flex-wrap items-center gap-3">
       <a href="#/" className="text-accent hover:underline shrink-0">
         ← Back
       </a>
-      <select
-        value={riffId}
-        onChange={(e) => onRiffIdChange(e.target.value)}
-        className="bg-bg-tertiary border border-bg-tertiary rounded px-3 py-2 text-text-primary"
+      <Select value={riffId} onValueChange={onRiffIdChange}>
+        <SelectTrigger className="min-w-[200px]">
+          <SelectValue placeholder="Select riff" />
+        </SelectTrigger>
+        <SelectContent>
+          {riffList.map((r) => {
+            const isUserRiff = r.id.startsWith('user-riff-');
+            const isCurrent = r.id === riffId;
+            const canDelete = isUserRiff && isCurrent;
+            return (
+              <SelectItem key={r.id} value={r.id}>
+                <div className="flex items-center justify-between gap-2 w-full">
+                  <span className="truncate">{r.name}</span>
+                  <button
+                    type="button"
+                    className={`inline-flex items-center justify-center rounded p-0.5 ${
+                      canDelete
+                        ? 'text-text-secondary hover:text-red-400'
+                        : 'text-text-secondary/40 cursor-default'
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!canDelete) return;
+                      if (!window.confirm('Delete this riff from your library? This cannot be undone.')) return;
+                      deleteUserRiff(r.id);
+                      const remaining = riffList.filter((x) => x.id !== r.id);
+                      const next = remaining[0];
+                      onRiffIdChange(next ? next.id : '');
+                    }}
+                    aria-label={canDelete ? 'Delete riff' : undefined}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+      <Dialog
+        open={isNewDialogOpen}
+        onOpenChange={(open) => {
+          setIsNewDialogOpen(open);
+          if (open) setNewRiffName('');
+        }}
       >
-        {riffList.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.name}
-          </option>
-        ))}
-      </select>
-      <button
-        onClick={onNewRiff}
-        className="px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 text-sm"
-      >
-        New riff
-      </button>
-      <input
-        type="text"
-        value={riff.name}
-        onChange={(e) => onRiffChange((p) => ({ ...p, name: e.target.value }))}
-        className="bg-bg-tertiary border border-bg-tertiary rounded px-3 py-2 max-w-[200px]"
-        placeholder="Riff name"
-      />
+        <DialogTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full border-bg-tertiary bg-bg-tertiary text-sm"
+            >
+              New riff
+            </Button>
+          }
+        />
+        <DialogContent>
+          <DialogHeaderUI>
+            <DialogTitle>Create new riff</DialogTitle>
+            <DialogDescription>Give your riff a name so you can find it later.</DialogDescription>
+          </DialogHeaderUI>
+          <div className="mt-2">
+            <Input
+              autoFocus
+              placeholder="Riff name"
+              value={newRiffName}
+              onChange={(e) => setNewRiffName(e.target.value)}
+            />
+          </div>
+          <DialogFooter className="mt-4 justify-end">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setIsNewDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const name = newRiffName.trim() || 'New riff';
+                onNewRiff(name);
+                setIsNewDialogOpen(false);
+              }}
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <span
         className="text-xs text-text-secondary shrink-0"
         title={isUnsaved ? 'Unsaved changes' : 'Saved'}
@@ -110,94 +183,48 @@ export function EditorHeader({
       </span>
       <div className="flex items-center gap-2 text-sm">
         <span className="text-text-secondary">Time</span>
-        <select
+        <Select
           value={timeSignatureId}
-          onChange={(e) => {
-            const [num, denom] = e.target.value.split('/').map(Number);
+          onValueChange={(value) => {
+            const [num, denom] = value.split('/').map(Number);
             onRiffChange((p) => ({ ...p, timeSignature: { num, denom } }));
           }}
-          className="bg-bg-tertiary border rounded px-2 py-1"
         >
-          {TIME_SIGNATURES.map((ts) => (
-            <option key={ts.id} value={ts.id}>
-              {ts.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger size="sm" className="min-w-[80px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIME_SIGNATURES.map((ts) => (
+              <SelectItem key={ts.id} value={ts.id}>
+                {ts.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex items-center gap-2 text-sm">
         <span className="text-text-secondary">Bars</span>
-        <select
-          value={bars}
-          onChange={(e) => {
-            const v = Number(e.target.value) || 2;
+        <Select
+          value={String(bars)}
+          onValueChange={(value) => {
+            const v = Number(value) || 2;
             onRiffChange((p) => ({ ...p, lengthBars: v }));
           }}
-          className="bg-bg-tertiary border rounded px-2 py-1"
         >
-          {BAR_OPTIONS.map((b) => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger size="sm" className="min-w-[72px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {BAR_OPTIONS.map((b) => (
+              <SelectItem key={b} value={String(b)}>
+                {b}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-text-secondary">BPM</span>
-        <input
-          type="number"
-          min={minBpm}
-          max={maxBpm}
-          value={bpm}
-          onChange={(e) => {
-            const v = Number(e.target.value) || 100;
-            onRiffChange((p) => ({ ...p, tempo: v }));
-          }}
-          className="w-14 bg-bg-tertiary border rounded px-2 py-1 text-right"
-        />
-      </div>
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-text-secondary">Key</span>
-        <select
-          value={riff.key ?? 'A'}
-          onChange={(e) => onRiffChange((p) => ({ ...p, key: e.target.value }))}
-          className="bg-bg-tertiary border rounded px-2 py-1"
-        >
-          {NOTE_NAMES.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-text-secondary">Scale</span>
-        <select
-          value={riff.scale ?? 'pentatonic'}
-          onChange={(e) => onRiffChange((p) => ({ ...p, scale: e.target.value }))}
-          className="bg-bg-tertiary border rounded px-2 py-1"
-        >
-          {SCALE_OPTIONS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-text-secondary">Tuning</span>
-        <select
-          value={riff.tuningId ?? 'standard'}
-          onChange={(e) => onRiffChange((p) => ({ ...p, tuningId: e.target.value }))}
-          className="bg-bg-tertiary border rounded px-2 py-1"
-        >
-          {TUNINGS_LIST.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
+     
+     {/*}
       <button
         onClick={onCopyAsJson}
         className="flex items-center gap-2 px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 text-sm"
@@ -205,7 +232,7 @@ export function EditorHeader({
       >
         <Copy size={16} />
         Copy as JSON
-      </button>
+      </button>*/}
       {onExportFile && (
         <button
           onClick={onExportFile}
@@ -285,10 +312,13 @@ export function EditorHeader({
         </button>
         {onMetronomeVolumeChange != null && (
           <div className="flex items-center gap-2">
-            <Metronome size={18} className="text-text-secondary shrink-0" title="Metronome volume" />
+            <Metronome size={18} className="text-text-secondary shrink-0" />
             <Slider
               value={[metronomeVolume]}
-              onValueChange={([v]) => onMetronomeVolumeChange(v)}
+              onValueChange={(vals) => {
+                const v = Array.isArray(vals) ? vals[0] : vals;
+                onMetronomeVolumeChange(v);
+              }}
               min={0}
               max={1}
               step={0.05}

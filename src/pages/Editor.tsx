@@ -32,11 +32,7 @@ function defaultRiff(id: string, name = 'New riff'): Riff {
     name,
     timeSignature: { num: 4, denom: 4 },
     tempo: 100,
-    bpmRange: { min: 60, max: 120 },
     lengthBars: 8,
-    tuningId: 'standard',
-    key: 'A',
-    scale: 'pentatonic',
     style: 'user',
     notes: [],
   };
@@ -69,9 +65,7 @@ export function Editor() {
   const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useRiffHistory(riff ?? null);
 
   const bars = riff?.lengthBars ?? 8;
-  const tuning = (riff?.tuningId && TUNINGS[riff.tuningId as keyof typeof TUNINGS]?.semitones)
-    ? TUNINGS[riff.tuningId as keyof typeof TUNINGS].semitones
-    : STANDARD_TUNING;
+  const tuning = STANDARD_TUNING;
   const stringLabels = getStringLabels(tuning);
 
   // Sync riff from selection or new; reset scroll/playback when switching riffs
@@ -79,13 +73,10 @@ export function Editor() {
     if (riffId) {
       const r = getRiff(riffId);
       if (r) {
-        const normalized = {
+        const normalized: Riff = {
           ...r,
           lengthBars: r.lengthBars ?? 8,
-          tempo: r.tempo ?? r.bpmRange?.min ?? 100,
-          tuningId: r.tuningId ?? 'standard',
-          key: r.key ?? 'A',
-          scale: r.scale ?? 'pentatonic',
+          tempo: r.tempo ?? 100,
         };
         setRiffState(normalized);
         setLastSavedSnapshot(JSON.stringify(normalized));
@@ -111,7 +102,7 @@ export function Editor() {
   }, [riff]);
 
   const isUnsaved = riff !== null && JSON.stringify(riff) !== lastSavedSnapshot;
-  const effectiveBpm = riff?.tempo ?? riff?.bpmRange?.min ?? 100;
+  const effectiveBpm = riff?.tempo ?? 100;
 
   const subsPerBar = riff && riff.timeSignature ? getSubdivisionsPerBar(riff.timeSignature) : 16;
   const totalColumns = bars * subsPerBar;
@@ -293,9 +284,9 @@ export function Editor() {
     [pushHistory]
   );
 
-  const handleNewRiff = () => {
+  const handleNewRiff = (name: string) => {
     const id = nextUserRiffId();
-    const r = defaultRiff(id);
+    const r = defaultRiff(id, name);
     saveUserRiff(r);
     setRiffId(id);
     setRiffState(r);
@@ -805,12 +796,7 @@ export function Editor() {
               </option>
             ))}
           </select>
-          <button
-            onClick={handleNewRiff}
-            className="px-4 py-2 rounded bg-accent text-white font-medium"
-          >
-            New riff
-          </button>
+          {/* New riff now created via the header dialog */}
         </div>
       </div>
     );

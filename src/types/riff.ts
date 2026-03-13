@@ -74,20 +74,9 @@ export type Riff = {
   id: string;
   name: string;
 
-  /**
-   * Canonical tempo for the riff. Existing data uses bpmRange,
-   * so both are optional and can coexist.
-   */
   tempo?: number;
-  bpmRange?: {
-    min: number;
-    max: number;
-  };
 
   timeSignature?: TimeSignature;
-
-  key?: string;
-  scale?: string;
 
   /**
    * Logical length in bars. Existing editor uses a separate `bars`
@@ -99,8 +88,6 @@ export type Riff = {
    * Tuning identifier (e.g. 'standard'); actual semitone arrays
    * live in data/tunings.
    */
-  tuningId?: TuningId;
-
   instrument?: string;
 
   /**

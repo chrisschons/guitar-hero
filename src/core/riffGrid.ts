@@ -192,16 +192,37 @@ export function applyDurationResizeToNotes(
 
   let spanStart: number;
   let spanEnd: number;
+
   if (curStart === curEnd) {
+    // Single-slot note: dragging defines the new span directly.
     spanStart = minSlot;
     spanEnd = maxSlot;
   } else if (anchorSlot === curStart && targetSlot >= curStart && targetSlot <= curEnd) {
-    spanStart = curStart;
-    spanEnd = targetSlot;
+    // Dragging in from the left edge over part of the group: remove the dragged
+    // prefix and keep the remainder of the note to the right.
+    const newStart = targetSlot + 1;
+    if (newStart <= curEnd) {
+      spanStart = newStart;
+      spanEnd = curEnd;
+    } else {
+      // Dragged across the entire note span; keep original as a safety net.
+      spanStart = curStart;
+      spanEnd = curEnd;
+    }
   } else if (anchorSlot === curEnd && targetSlot >= curStart && targetSlot <= curEnd) {
-    spanStart = targetSlot;
-    spanEnd = curEnd;
+    // Dragging in from the right edge over part of the group: remove the dragged
+    // suffix and keep the remainder of the note to the left.
+    const newEnd = targetSlot - 1;
+    if (newEnd >= curStart) {
+      spanStart = curStart;
+      spanEnd = newEnd;
+    } else {
+      // Dragged across the entire note span; keep original as a safety net.
+      spanStart = curStart;
+      spanEnd = curEnd;
+    }
   } else {
+    // Dragging outward: grow the span to include the dragged region.
     spanStart = Math.min(curStart, minSlot);
     spanEnd = Math.max(curEnd, maxSlot);
   }

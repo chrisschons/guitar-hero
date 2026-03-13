@@ -10,7 +10,7 @@ export const demo44Riff = /** @type {Riff} */ ({
   id: 'demo-4-4',
   name: '4/4 single string',
   timeSignature: { num: 4, denom: 4 },
-  bpmRange: { min: 60, max: 120 },
+  tempo: 60,
   style: 'demo',
   notes: [
     { string: 6, fret: 0, bar: 1, subdivision: 1 }, 
@@ -47,7 +47,7 @@ export const demo68Riff = /** @type {Riff} */ ({
   id: 'demo-6-8',
   name: '6/8 single string',
   timeSignature: { num: 6, denom: 8 },
-  bpmRange: { min: 60, max: 120 },
+  tempo: 60,
   style: 'demo',
   notes: [
     { string: 6, fret: 0, bar: 1, subdivision: 1 },

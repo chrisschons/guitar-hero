@@ -38,6 +38,19 @@ export function saveUserRiff(riff) {
 }
 
 /**
+ * Delete a user riff from localStorage by id. No-op if the id does not exist
+ * or refers to a built-in (non-user) riff.
+ * @param {string} id
+ */
+export function deleteUserRiff(id) {
+  if (!id.startsWith(ID_PREFIX)) return;
+  const riffs = loadUserRiffs();
+  if (!Object.prototype.hasOwnProperty.call(riffs, id)) return;
+  delete riffs[id];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(riffs));
+}
+
+/**
  * Generate a new id for a user riff (not persisted until save).
  * @returns {string}
  */
