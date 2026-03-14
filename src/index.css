@@ -157,3 +157,13 @@ body {
     @apply font-sans;
   }
 }
+
+/* State test grid: force cursor during drag/resize so it overrides child elements (handles, cells) */
+.state-test-grid-cursor-grabbing,
+.state-test-grid-cursor-grabbing * {
+  cursor: grabbing !important;
+}
+.state-test-grid-cursor-col-resize,
+.state-test-grid-cursor-col-resize * {
+  cursor: col-resize !important;
+}

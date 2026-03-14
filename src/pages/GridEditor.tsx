@@ -23,10 +23,671 @@ import {
   splitDurationToNotes,
 } from '../core/gridEditorModel';
 import { applyDurationResizeToNotes } from '../core/riffGrid';
-
-const COLUMN_WIDTH = 48;
+import { GridNoteChip } from '../components/GridNoteChip';
+const COLUMN_WIDTH = 68;
 const ROW_HEIGHT = 32;
 const NUM_STRINGS = 6;
+
+type StateTestNote = {
+  id: string;
+  row: number;
+  startCol: number;
+  endCol: number;
+  value: number;
+  selected: boolean;
+};
+
+function genNoteId() {
+  return `note-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function StateTestGrid() {
+  const TEST_ROWS = 4;
+  const TEST_COLS = 10;
+
+  const [notes, setNotes] = useState<StateTestNote[]>(() => [
+    { id: genNoteId(), row: 0, startCol: 1, endCol: 1, value: 0, selected: false },
+    { id: genNoteId(), row: 1, startCol: 3, endCol: 4, value: 5, selected: false },
+    { id: genNoteId(), row: 2, startCol: 5, endCol: 5, value: 7, selected: false },
+  ]);
+
+  const [hover, setHover] = useState<{ row: number; col: number } | null>(null);
+  const [dragState, setDragState] = useState<{
+    noteId: string;
+    anchorRow: number;
+    anchorCol: number;
+    anchorStartCol: number;
+    anchorEndCol: number;
+    anchorOffsetX: number;
+    anchorOffsetY: number;
+    currentRow: number;
+    currentCol: number;
+  } | null>(null);
+  const [resizeState, setResizeState] = useState<{
+    noteId: string;
+    edge: 'left' | 'right';
+    anchorStartCol: number;
+    anchorEndCol: number;
+    startClientX: number;
+    currentClientX: number;
+    /** Pixel width of the note during resize (from grid left to current X or vice versa) */
+    visualWidthPx: number;
+  } | null>(null);
+  const [dragGhost, setDragGhost] = useState<{ clientX: number; clientY: number } | null>(null);
+  const digitBufferRef = useRef('');
+  const suppressClickAfterDragRef = useRef(false);
+  const gridWrapperRef = useRef<HTMLDivElement>(null);
+  const pendingDragRef = useRef<{
+    noteId: string;
+    anchorRow: number;
+    anchorCol: number;
+    clientX: number;
+    clientY: number;
+    wasOnlySelected: boolean;
+  } | null>(null);
+  const handleCellClickRef = useRef<(row: number, col: number) => void>(() => {});
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const resizeLatestRef = useRef<{ localX: number } | null>(null);
+  const pendingResizeRef = useRef<{
+    noteId: string;
+    edge: 'left' | 'right';
+    anchorStartCol: number;
+    anchorEndCol: number;
+    startClientX: number;
+    startClientY: number;
+  } | null>(null);
+  const RESIZE_HANDLE_WIDTH_PX = 14;
+  const NOTE_CHIP_PADDING_PX = 3;
+
+  const findNoteAt = useCallback(
+    (r: number, c: number) =>
+      notes.find((n) => n.row === r && c >= n.startCol && c <= n.endCol) ?? null,
+    [notes]
+  );
+
+  const handleCellClick = useCallback(
+    (row: number, col: number) => {
+      if (suppressClickAfterDragRef.current) {
+        suppressClickAfterDragRef.current = false;
+        return;
+      }
+      const note = findNoteAt(row, col);
+      if (!note) {
+        setNotes((prev) => {
+          const next = prev.map((n) => ({ ...n, selected: false }));
+          next.push({
+            id: genNoteId(),
+            row,
+            startCol: col,
+            endCol: col,
+            value: 0,
+            selected: true,
+          });
+          return next;
+        });
+        digitBufferRef.current = '';
+        return;
+      }
+      const wasOnlySelected =
+        note.selected && notes.filter((n) => n.selected).length === 1;
+      if (wasOnlySelected) {
+        setNotes((prev) =>
+          prev.map((n) =>
+            n.id === note.id ? { ...n, selected: false } : n
+          )
+        );
+      } else {
+        setNotes((prev) =>
+          prev.map((n) => ({
+            ...n,
+            selected: n.id === note.id,
+          }))
+        );
+      }
+      digitBufferRef.current = '';
+    },
+    [notes, findNoteAt]
+  );
+  handleCellClickRef.current = handleCellClick;
+
+  const DRAG_THRESHOLD_PX = 5;
+
+  const handleNoteMouseDown = (note: StateTestNote, row: number, col: number, e: React.MouseEvent) => {
+    if (dragState || resizeState) return;
+    const wasOnlySelected =
+      note.selected && notes.filter((n) => n.selected).length === 1;
+    setNotes((prev) =>
+      prev.map((n) => ({
+        ...n,
+        selected: n.id === note.id,
+      }))
+    );
+    digitBufferRef.current = '';
+    pendingDragRef.current = {
+      noteId: note.id,
+      anchorRow: row,
+      anchorCol: col,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      wasOnlySelected,
+    };
+  };
+
+  const handleResizeHandleMouseDown = (note: StateTestNote, edge: 'left' | 'right', e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (resizeState || dragState) return;
+    setNotes((prev) =>
+      prev.map((n) => ({ ...n, selected: n.id === note.id }))
+    );
+    digitBufferRef.current = '';
+    pendingResizeRef.current = {
+      noteId: note.id,
+      edge,
+      anchorStartCol: note.startCol,
+      anchorEndCol: note.endCol,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+    };
+  };
+
+  const handleCellMouseEnter = (row: number, col: number) => {
+    setHover({ row, col });
+    // During drag, drop cell is computed from anchor point in mousemove, not from cursor cell
+    if (dragState) return;
+    setDragState((prev) =>
+      prev ? { ...prev, currentRow: row, currentCol: col } : null
+    );
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (resizeState) {
+        const gridEl = gridWrapperRef.current;
+        if (gridEl) {
+          const rect = gridEl.getBoundingClientRect();
+          const localX = e.clientX - rect.left;
+          resizeLatestRef.current = { localX };
+          setResizeState((prev) => {
+            if (!prev) return null;
+            const { edge, anchorStartCol, anchorEndCol } = prev;
+            const noteLeftPx = anchorStartCol * COLUMN_WIDTH;
+            const noteRightPx = (anchorEndCol + 1) * COLUMN_WIDTH;
+            const minW = COLUMN_WIDTH;
+            let visualWidthPx: number;
+            if (edge === 'right') {
+              const visualRight = Math.max(noteLeftPx + minW, Math.min(localX, TEST_COLS * COLUMN_WIDTH));
+              visualWidthPx = visualRight - noteLeftPx;
+            } else {
+              const visualLeft = Math.min(noteRightPx - minW, Math.max(0, localX));
+              visualWidthPx = noteRightPx - visualLeft;
+            }
+            return { ...prev, currentClientX: e.clientX, visualWidthPx };
+          });
+        }
+        return;
+      }
+      if (dragState) {
+        setDragGhost({ clientX: e.clientX, clientY: e.clientY });
+        const gridEl = gridWrapperRef.current;
+        if (gridEl) {
+          const rect = gridEl.getBoundingClientRect();
+          const anchorPointClientX =
+            e.clientX -
+            dragState.anchorOffsetX +
+            (dragState.anchorCol - dragState.anchorStartCol) * COLUMN_WIDTH +
+            COLUMN_WIDTH / 2;
+          const anchorPointClientY =
+            e.clientY - dragState.anchorOffsetY + ROW_HEIGHT / 2;
+          const localX = anchorPointClientX - rect.left;
+          const localY = anchorPointClientY - rect.top;
+          const col = Math.floor(localX / COLUMN_WIDTH);
+          const row = Math.floor(localY / ROW_HEIGHT);
+          const currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
+          const currentCol = Math.max(0, Math.min(TEST_COLS - 1, col));
+          setDragState((prev) =>
+            prev ? { ...prev, currentRow, currentCol } : null
+          );
+        }
+        return;
+      }
+      const pendingResize = pendingResizeRef.current;
+      if (pendingResize) {
+        const dx = e.clientX - pendingResize.startClientX;
+        const dy = e.clientY - pendingResize.startClientY;
+        if (dx * dx + dy * dy > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+          const note = notesRef.current.find((n) => n.id === pendingResize.noteId);
+          if (note) {
+            const initialWidthPx = (note.endCol - note.startCol + 1) * COLUMN_WIDTH;
+            setResizeState({
+              noteId: note.id,
+              edge: pendingResize.edge,
+              anchorStartCol: pendingResize.anchorStartCol,
+              anchorEndCol: pendingResize.anchorEndCol,
+              startClientX: pendingResize.startClientX,
+              currentClientX: e.clientX,
+              visualWidthPx: initialWidthPx,
+            });
+          }
+          pendingResizeRef.current = null;
+        }
+        return;
+      }
+      const pending = pendingDragRef.current;
+      if (!pending) return;
+      const dx = e.clientX - pending.clientX;
+      const dy = e.clientY - pending.clientY;
+      if (dx * dx + dy * dy <= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+      const note = notesRef.current.find((n) => n.id === pending.noteId);
+      if (note) {
+        const gridEl = gridWrapperRef.current;
+        let anchorOffsetX = 0;
+        let anchorOffsetY = 0;
+        if (gridEl) {
+          const rect = gridEl.getBoundingClientRect();
+          const noteLeft = rect.left + note.startCol * COLUMN_WIDTH;
+          const noteTop = rect.top + note.row * ROW_HEIGHT;
+          anchorOffsetX = pending.clientX - noteLeft;
+          anchorOffsetY = pending.clientY - noteTop;
+        }
+        setDragGhost({ clientX: e.clientX, clientY: e.clientY });
+        setDragState({
+          noteId: note.id,
+          anchorRow: pending.anchorRow,
+          anchorCol: pending.anchorCol,
+          anchorStartCol: note.startCol,
+          anchorEndCol: note.endCol,
+          anchorOffsetX,
+          anchorOffsetY,
+          currentRow: pending.anchorRow,
+          currentCol: pending.anchorCol,
+        });
+      }
+      pendingDragRef.current = null;
+    };
+
+    const handleMouseUp = () => {
+      if (resizeState) {
+        const gridEl = gridWrapperRef.current;
+        const latest = resizeLatestRef.current;
+        resizeLatestRef.current = null;
+        if (gridEl) {
+          const rect = gridEl.getBoundingClientRect();
+          const { noteId, edge, anchorStartCol, anchorEndCol } = resizeState;
+          const localX = latest ? latest.localX : resizeState.currentClientX - rect.left;
+          setNotes((prev) => {
+            const note = prev.find((n) => n.id === noteId);
+            if (!note) return prev;
+            return prev.map((n) => {
+              if (n.id !== noteId) return n;
+              if (edge === 'right') {
+                const visualRightPx = Math.max(
+                  (anchorStartCol + 1) * COLUMN_WIDTH,
+                  Math.min(localX, TEST_COLS * COLUMN_WIDTH)
+                );
+                const newEndCol = Math.min(
+                  TEST_COLS - 1,
+                  Math.max(anchorStartCol, Math.max(0, Math.round(visualRightPx / COLUMN_WIDTH) - 1))
+                );
+                return { ...n, endCol: newEndCol };
+              } else {
+                const noteRightPx = (anchorEndCol + 1) * COLUMN_WIDTH;
+                const visualLeftPx = Math.min(
+                  noteRightPx - COLUMN_WIDTH,
+                  Math.max(0, localX)
+                );
+                const newStartCol = Math.min(
+                  anchorEndCol,
+                  Math.max(0, Math.min(Math.round(visualLeftPx / COLUMN_WIDTH), TEST_COLS - 1))
+                );
+                return { ...n, startCol: newStartCol };
+              }
+            });
+          });
+        }
+        setResizeState(null);
+        return;
+      }
+      if (pendingResizeRef.current) {
+        pendingResizeRef.current = null;
+      }
+      if (dragState) {
+        setDragGhost(null);
+        const {
+          noteId,
+          anchorRow,
+          anchorCol,
+          anchorStartCol,
+          anchorEndCol,
+          currentRow,
+          currentCol,
+        } = dragState;
+        const isValidDrop =
+          currentRow >= 0 &&
+          currentRow < TEST_ROWS &&
+          currentCol >= 0 &&
+          currentCol < TEST_COLS &&
+          (currentRow !== anchorRow || currentCol !== anchorCol);
+
+        if (isValidDrop) {
+          const deltaCol = currentCol - anchorCol;
+          const newStartCol = Math.max(
+            0,
+            Math.min(TEST_COLS - 1, anchorStartCol + deltaCol)
+          );
+          const span = anchorEndCol - anchorStartCol + 1;
+          const newEndCol = Math.max(
+            newStartCol,
+            Math.min(TEST_COLS - 1, newStartCol + span - 1)
+          );
+          setNotes((prev) =>
+            prev.map((n) =>
+              n.id === noteId
+                ? {
+                    ...n,
+                    row: currentRow,
+                    startCol: newStartCol,
+                    endCol: newEndCol,
+                    selected: false,
+                  }
+                : n
+            )
+          );
+          suppressClickAfterDragRef.current = true;
+        } else {
+          setNotes((prev) =>
+            prev.map((n) => ({ ...n, selected: false }))
+          );
+        }
+        setDragState(null);
+      } else if (pendingDragRef.current) {
+        const { anchorRow, anchorCol, wasOnlySelected } = pendingDragRef.current;
+        pendingDragRef.current = null;
+        if (wasOnlySelected) {
+          const note = notes.find(
+            (n) =>
+              n.row === anchorRow &&
+              anchorCol >= n.startCol &&
+              anchorCol <= n.endCol
+          );
+          if (note) {
+            setNotes((prev) =>
+              prev.map((n) => (n.id === note.id ? { ...n, selected: false } : n))
+            );
+          }
+        }
+        suppressClickAfterDragRef.current = true;
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragState, resizeState, TEST_ROWS, TEST_COLS]);
+
+  // When exactly one note is selected: digit keys update value (0–24); Backspace/Delete removes the note
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active?.tagName === 'INPUT' ||
+        active?.tagName === 'TEXTAREA' ||
+        active?.tagName === 'SELECT'
+      )
+        return;
+
+      const key = e.key;
+
+      if (key === 'Backspace' || key === 'Delete') {
+        e.preventDefault();
+        if (e.repeat) return;
+        setNotes((prev) => {
+          const selected = prev.find((n) => n.selected);
+          if (!selected) return prev;
+          return prev.filter((n) => n.id !== selected.id);
+        });
+        digitBufferRef.current = '';
+        return;
+      }
+
+      if (key.length !== 1 || !/^[0-9]$/.test(key)) return;
+      if (e.repeat) return;
+
+      digitBufferRef.current = (digitBufferRef.current + key).slice(-2);
+      const parsed = parseInt(digitBufferRef.current, 10);
+      const value = Number.isFinite(parsed)
+        ? Math.min(24, Math.max(0, parsed))
+        : 0;
+
+      setNotes((prev) => {
+        const selected = prev.filter((n) => n.selected);
+        if (selected.length !== 1) return prev;
+        return prev.map((n) =>
+          n.id === selected[0].id ? { ...n, value } : n
+        );
+      });
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Cursor during resize (col-resize) and during drag (grabbing); use !important so it overrides child cursor styles
+  useEffect(() => {
+    if (resizeState) {
+      document.body.style.setProperty('cursor', 'col-resize', 'important');
+      return () => {
+        document.body.style.removeProperty('cursor');
+      };
+    }
+    if (dragState) {
+      document.body.style.setProperty('cursor', 'grabbing', 'important');
+      return () => {
+        document.body.style.removeProperty('cursor');
+      };
+    }
+  }, [resizeState, dragState]);
+
+  return (
+    <div className="inline-block rounded-lg border border-bg-tertiary bg-bg-secondary/80 p-4">
+      <div
+        ref={gridWrapperRef}
+        className={`relative select-none${dragState ? ' state-test-grid-cursor-grabbing' : ''}${resizeState ? ' state-test-grid-cursor-col-resize' : ''}`}
+        style={{
+          width: TEST_COLS * COLUMN_WIDTH,
+          height: TEST_ROWS * ROW_HEIGHT,
+        }}
+        onMouseLeave={() => {
+          if (dragState)
+            setDragState((prev) =>
+              prev ? { ...prev, currentRow: -1, currentCol: -1 } : null
+            );
+          if (resizeState) setResizeState(null);
+        }}
+      >
+        {/* Dot grid at intersections */}
+        {Array.from({ length: TEST_ROWS + 1 }, (_, r) =>
+          Array.from({ length: TEST_COLS + 1 }, (_, c) => (
+            <div
+              key={`dot-${r}-${c}`}
+              className="absolute rounded-full bg-bg-tertiary/70"
+              style={{
+                width: 4,
+                height: 4,
+                left: c * COLUMN_WIDTH,
+                top: r * ROW_HEIGHT,
+                transform: 'translate(-50%, -50%)',
+              }}
+            />
+          ))
+        )}
+
+        {/* Drop target: full area that will be replaced, relative to click (anchor) position */}
+        {dragState &&
+          dragState.currentRow >= 0 &&
+          dragState.currentCol >= 0 &&
+          (dragState.currentRow !== dragState.anchorRow ||
+            dragState.currentCol !== dragState.anchorCol) && (
+            (() => {
+              const span = dragState.anchorEndCol - dragState.anchorStartCol + 1;
+              const clickOffsetInNote = dragState.anchorCol - dragState.anchorStartCol;
+              const dropStartCol = dragState.currentCol - clickOffsetInNote;
+              const clampedStart = Math.max(0, Math.min(dropStartCol, TEST_COLS - span));
+              if (span <= 0) return null;
+              return (
+                <div
+                  className="absolute border border-pink-100/20 bg-pink-400/20 pointer-events-none"
+                  style={{
+                    left: clampedStart * COLUMN_WIDTH,
+                    top: dragState.currentRow * ROW_HEIGHT,
+                    width: span * COLUMN_WIDTH,
+                    height: ROW_HEIGHT,
+                  }}
+                  aria-hidden
+                />
+              );
+            })()
+          )}
+
+        {/* Interactive cells overlay: empty cells, hover */}
+        <div
+          className="absolute inset-0 grid"
+          style={{
+            gridTemplateColumns: `repeat(${TEST_COLS}, ${COLUMN_WIDTH}px)`,
+            gridTemplateRows: `repeat(${TEST_ROWS}, ${ROW_HEIGHT}px)`,
+          }}
+        >
+          {Array.from({ length: TEST_ROWS }, (_, r) =>
+            Array.from({ length: TEST_COLS }, (_, c) => {
+              const isHover = hover?.row === r && hover?.col === c;
+              const hasNote = findNoteAt(r, c);
+              return (
+                <div
+                  key={`${r}-${c}`}
+                  className="relative flex items-center justify-center cursor-pointer"
+                  onClick={() => handleCellClick(r, c)}
+                  onMouseEnter={() => handleCellMouseEnter(r, c)}
+                  onMouseLeave={() => setHover(null)}
+                >
+                  {!hasNote && isHover && !dragState && !resizeState && (
+                    <GridNoteChip value="" slots={1} state="empty" />
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Notes layer: spanning chips with resize handles */}
+        {notes.map((note) => {
+          const isDragging = dragState?.noteId === note.id;
+          const isResizing = resizeState?.noteId === note.id;
+          let leftPx: number;
+          let widthPx: number;
+          if (isResizing && resizeState) {
+            widthPx = resizeState.visualWidthPx;
+            if (resizeState.edge === 'left') {
+              leftPx = (resizeState.anchorEndCol + 1) * COLUMN_WIDTH - widthPx;
+            } else {
+              leftPx = resizeState.anchorStartCol * COLUMN_WIDTH;
+            }
+          } else {
+            leftPx = note.startCol * COLUMN_WIDTH;
+            widthPx = (note.endCol - note.startCol + 1) * COLUMN_WIDTH;
+          }
+          const isHoverNote =
+            hover &&
+            note.row === hover.row &&
+            hover.col >= note.startCol &&
+            hover.col <= note.endCol;
+          const chipState = isResizing
+            ? 'resizing'
+            : note.selected
+            ? isHoverNote && !isDragging
+              ? 'selectedHover'
+              : 'selected'
+            : isHoverNote && !isDragging
+            ? 'hover'
+            : 'default';
+
+          const chipWidthPx = widthPx - 2 * NOTE_CHIP_PADDING_PX;
+
+          return (
+            <div
+              key={note.id}
+              className="absolute"
+              style={{
+                left: leftPx,
+                top: note.row * ROW_HEIGHT,
+                width: widthPx,
+                height: ROW_HEIGHT,
+                pointerEvents: isDragging ? 'none' : 'auto',
+              }}
+              onMouseEnter={() => setHover({ row: note.row, col: note.startCol })}
+              onMouseLeave={() => setHover(null)}
+            >
+              {!isDragging && (
+                <>
+                  <div
+                    className="absolute left-0 top-0 bottom-0 flex items-center justify-center cursor-pointer z-0 box-border"
+                    style={{
+                      width: widthPx,
+                      padding: `${NOTE_CHIP_PADDING_PX}px`,
+                    }}
+                    onMouseDown={(e) => handleNoteMouseDown(note, note.row, note.startCol, e)}
+                  >
+                    <GridNoteChip
+                      value={note.value}
+                      slots={1}
+                      widthPx={chipWidthPx}
+                      state={chipState}
+                    />
+                  </div>
+                  <div
+                    className="absolute left-0 top-0 bottom-0 cursor-col-resize z-10"
+                    style={{ width: RESIZE_HANDLE_WIDTH_PX }}
+                    onMouseDown={(e) => handleResizeHandleMouseDown(note, 'left', e)}
+                    aria-label="Resize left"
+                  />
+                  <div
+                    className="absolute right-0 top-0 bottom-0 cursor-col-resize z-10"
+                    style={{ width: RESIZE_HANDLE_WIDTH_PX }}
+                    onMouseDown={(e) => handleResizeHandleMouseDown(note, 'right', e)}
+                    aria-label="Resize right"
+                  />
+                </>
+              )}
+            </div>
+          );
+        })}
+        {dragGhost && dragState && (() => {
+          const note = notes.find((n) => n.id === dragState.noteId);
+          if (!note) return null;
+          const span = note.endCol - note.startCol + 1;
+          const ghostWidthPx = span * COLUMN_WIDTH - 2 * NOTE_CHIP_PADDING_PX;
+          return (
+            <div
+              className="pointer-events-none fixed z-50"
+              style={{
+                left: dragGhost.clientX - dragState.anchorOffsetX,
+                top: dragGhost.clientY - dragState.anchorOffsetY,
+              }}
+            >
+              <GridNoteChip
+                value={note.value}
+                slots={1}
+                widthPx={ghostWidthPx}
+                state="dragGhost"
+              />
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
 
 function defaultRiff(id: string, name = 'New riff'): Riff {
   return {
@@ -1124,6 +1785,22 @@ export function GridEditor() {
             >
               Clear all
             </button>
+          </div>
+        </div>
+        <div className="flex flex-col gap-4 p-12">
+          <div>
+            <p>ui elements</p>
+            {/* Single-slot default notes */}
+            <GridNoteChip slots={1} state="empty" value="" />
+            <GridNoteChip value={0} slots={1} state="default" />
+           
+            <GridNoteChip value={12} slots={1} state="selected" />
+          </div>
+          <div>
+            <p className="mb-2 text-sm text-text-secondary">
+              state test grid (4×10, click empty to add value, click note to toggle selection)
+            </p>
+            <StateTestGrid />
           </div>
         </div>
       </main>
