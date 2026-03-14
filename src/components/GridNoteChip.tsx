@@ -48,44 +48,44 @@ export function GridNoteChip({
   } else switch (state) {
     case 'empty':
       stateClasses =
-        'hover:bg-pink-400/20 hover:border-pink-100/20 border-1 border-transparent';
+        'hover:bg-chip/20 hover:border-chip/20 border border-transparent';
       break;
     case 'emptySelected':
       stateClasses =
-        'bg-pink-400/20 border border-pink-100/20';
+        'bg-chip/20 border border-chip/20';
       break;
     case 'selected':
       stateClasses =
-        'bg-pink-500/50 text-white border-2 border-cyan-400 shadow-md shadow-cyan-500/50';
+        'bg-chip/50 text-white border-2 border-chip-selected shadow-md shadow-chip-selected/50';
       break;
     case 'ghost':
       stateClasses =
-        'bg-pink-500/20 text-white border border-pink-400/60';
+        'bg-chip/20 text-white border border-chip/60';
       break;
     case 'hover':
       stateClasses =
-        'bg-rose-400 text-white border border-rose-400';
+        'bg-chip text-white border border-chip';
       break;
     case 'selectedHover':
       stateClasses =
-        'bg-rose-400 text-white border-2 border-cyan-400 shadow-lg shadow-cyan-500/50';
+        'bg-chip text-white border-2 border-chip-selected shadow-lg shadow-chip-selected/50';
       break;
     case 'resizing':
       stateClasses =
-        'bg-cyan-400 text-white border-2 border-cyan-500';
+        'bg-chip-selected text-white border-2 border-chip-selected/80';
       break;
     case 'dragGhost':
       stateClasses =
-        'bg-cyan-400 text-white border-2 border-cyan-500';
+        'bg-chip-selected text-white border-2 border-chip-selected/80';
       break;
     case 'active':
       stateClasses =
-        'text-white border border-transparent bg-cyan-600 border-pink-600/50 transition-all duration-200';
+        'text-white border border-transparent bg-chip-selected border-chip/50 transition-all duration-200';
       break;
     case 'default':
     default:
       stateClasses =
-        'bg-pink-500/50 text-white border border-transparent hover:bg-pink-500 hover:border-pink-600/50 active:bg-cyan-600 active:border-pink-600/50 transition-all duration-200';
+        'bg-chip/50 text-white border border-transparent hover:bg-chip hover:border-chip/50 active:bg-chip-selected active:border-chip/50 transition-all duration-200';
       break;
   }
 

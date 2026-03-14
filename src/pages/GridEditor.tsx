@@ -30,8 +30,8 @@ import {
   Copy,
   Scissors,
   ClipboardPaste,
-  SplitSquareVertical,
-  Layers,
+  Maximize2,
+  Minimize2,
   Trash2,
 } from 'lucide-react';
 const COLUMN_WIDTH = 68;
@@ -158,6 +158,9 @@ function StateTestGrid() {
     currentRow: number;
     currentCol: number;
   } | null>(null);
+  const [marqueePointerDown, setMarqueePointerDown] = useState(false);
+  const setMarqueePointerDownRef = useRef(setMarqueePointerDown);
+  setMarqueePointerDownRef.current = setMarqueePointerDown;
   const digitBufferRef = useRef('');
   const suppressClickAfterDragRef = useRef(false);
   const suppressClickAfterMarqueeRef = useRef(false);
@@ -209,6 +212,14 @@ function StateTestGrid() {
   const expandSelectionWithChordMatesRef = useRef(expandSelectionWithChordMates);
   expandSelectionWithChordMatesRef.current = expandSelectionWithChordMates;
 
+  const handleCopyRef = useRef<() => void>(() => {});
+  const handleCutRef = useRef<() => void>(() => {});
+  const handlePasteRef = useRef<() => void>(() => {});
+  const handleUndoRef = useRef<() => void>(() => {});
+  const handleRedoRef = useRef<() => void>(() => {});
+  const handleSplitIntoNotesRef = useRef<() => void>(() => {});
+  const handleCombineIntoChordRef = useRef<() => void>(() => {});
+
   const handleCopy = useCallback(() => {
     const selected = notes.filter((n) => n.selected);
     if (selected.length === 0) return;
@@ -225,6 +236,7 @@ function StateTestGrid() {
       })),
     });
   }, [notes]);
+  handleCopyRef.current = handleCopy;
 
   const handleCut = useCallback(() => {
     const selected = notes.filter((n) => n.selected);
@@ -243,19 +255,19 @@ function StateTestGrid() {
     });
     applyMutation((prev) => prev.filter((n) => !n.selected));
   }, [notes, applyMutation]);
+  handleCutRef.current = handleCut;
 
   const handlePaste = useCallback(() => {
     if (!clipboard || clipboard.items.length === 0) return;
-    const pasteRow = (() => {
-      const selected = notes.filter((n) => n.selected);
-      if (selected.length === 0) return 0;
-      return Math.min(...selected.map((n) => n.row));
-    })();
-    const pasteCol = (() => {
-      const selected = notes.filter((n) => n.selected);
-      if (selected.length === 0) return 0;
-      return Math.min(...selected.map((n) => n.startCol));
-    })();
+    const selected = notes.filter((n) => n.selected);
+    const pasteRow =
+      selected.length > 0
+        ? Math.min(...selected.map((n) => n.row))
+        : selectedCell?.row ?? 0;
+    const pasteCol =
+      selected.length > 0
+        ? Math.min(...selected.map((n) => n.startCol))
+        : selectedCell?.col ?? 0;
     applyMutation((prev) => {
       const pastedChordId = genChordId();
       const newNotes: StateTestNote[] = clipboard.items.map((item) => {
@@ -315,7 +327,9 @@ function StateTestGrid() {
       );
       return [...existingCleaned.map((n) => ({ ...n, selected: false })), ...newNotes];
     });
-  }, [clipboard, notes, applyMutation, TEST_ROWS, TEST_COLS]);
+    if (selected.length === 0 && selectedCell != null) setSelectedCell(null);
+  }, [clipboard, notes, selectedCell, applyMutation, TEST_ROWS, TEST_COLS]);
+  handlePasteRef.current = handlePaste;
 
   const handleSplitIntoNotes = useCallback(() => {
     const selected = notes.filter((n) => n.selected);
@@ -338,6 +352,7 @@ function StateTestGrid() {
       })
     );
   }, [notes, applyMutation]);
+  handleSplitIntoNotesRef.current = handleSplitIntoNotes;
 
   const handleCombineIntoChord = useCallback(() => {
     const selected = notes.filter((n) => n.selected);
@@ -354,6 +369,7 @@ function StateTestGrid() {
       );
     });
   }, [notes, applyMutation]);
+  handleCombineIntoChordRef.current = handleCombineIntoChord;
 
   const handleClearAll = useCallback(() => {
     applyMutation(() => []);
@@ -367,6 +383,7 @@ function StateTestGrid() {
     setUndoStack((s) => s.slice(0, -1));
     isUndoRedoRef.current = false;
   }, [undoStack, notes]);
+  handleUndoRef.current = handleUndo;
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return;
@@ -376,6 +393,7 @@ function StateTestGrid() {
     setRedoStack((r) => r.slice(0, -1));
     isUndoRedoRef.current = false;
   }, [redoStack, notes]);
+  handleRedoRef.current = handleRedo;
 
   const findNoteAt = useCallback(
     (r: number, c: number) =>
@@ -444,6 +462,7 @@ function StateTestGrid() {
 
   const handleNoteMouseDown = (note: StateTestNote, row: number, col: number, e: React.MouseEvent) => {
     if (dragState || resizeState) return;
+    setSelectedCell(null);
     const wasOnlySelected =
       note.selected && notes.filter((n) => n.selected).length === 1;
     if (e.shiftKey) {
@@ -480,6 +499,7 @@ function StateTestGrid() {
   const handleResizeHandleMouseDown = (note: StateTestNote, edge: 'left' | 'right', e: React.MouseEvent) => {
     e.stopPropagation();
     if (resizeState || dragState) return;
+    setSelectedCell(null);
     setNotes((prev) => {
       const primaryIds = new Set([note.id]);
       const expanded = expandSelectionWithChordMates(prev, primaryIds);
@@ -567,6 +587,25 @@ function StateTestGrid() {
           const row = Math.floor(localY / ROW_HEIGHT);
           const currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
           const currentCol = Math.max(0, Math.min(TEST_COLS - 1, col));
+          const minRow = Math.min(marqueeState.startRow, currentRow);
+          const maxRow = Math.max(marqueeState.startRow, currentRow);
+          const minCol = Math.min(marqueeState.startCol, currentCol);
+          const maxCol = Math.max(marqueeState.startCol, currentCol);
+          setNotes((prev) => {
+            const intersectsIds = new Set(
+              prev
+                .filter(
+                  (n) =>
+                    n.row >= minRow &&
+                    n.row <= maxRow &&
+                    n.startCol <= maxCol &&
+                    n.endCol >= minCol
+                )
+                .map((n) => n.id)
+            );
+            const expanded = expandSelectionWithChordMatesRef.current(prev, intersectsIds);
+            return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
+          });
           setMarqueeState((prev) =>
             prev ? { ...prev, currentRow, currentCol } : null
           );
@@ -749,33 +788,15 @@ function StateTestGrid() {
         pendingResizeRef.current = null;
       }
       if (marqueeState) {
-        const { startRow, startCol, currentRow, currentCol } = marqueeState;
-        const minRow = Math.min(startRow, currentRow);
-        const maxRow = Math.max(startRow, currentRow);
-        const minCol = Math.min(startCol, currentCol);
-        const maxCol = Math.max(startCol, currentCol);
-        setNotes((prev) => {
-          const intersectsIds = new Set(
-            prev
-              .filter(
-                (n) =>
-                  n.row >= minRow &&
-                  n.row <= maxRow &&
-                  n.startCol <= maxCol &&
-                  n.endCol >= minCol
-              )
-              .map((n) => n.id)
-          );
-          const expanded = expandSelectionWithChordMatesRef.current(prev, intersectsIds);
-          return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
-        });
         setMarqueeState(null);
+        setMarqueePointerDownRef.current(false);
         setSelectedCell(null);
         suppressClickAfterMarqueeRef.current = true;
         return;
       }
       if (pendingMarqueeRef.current) {
         pendingMarqueeRef.current = null;
+        setMarqueePointerDownRef.current(false);
       }
       if (dragState) {
         setDragGhost(null);
@@ -895,7 +916,6 @@ function StateTestGrid() {
             );
           }
         }
-        suppressClickAfterDragRef.current = true;
       }
     };
     window.addEventListener('mousemove', handleMouseMove);
@@ -918,6 +938,87 @@ function StateTestGrid() {
         return;
 
       const key = e.key;
+      const mod = e.metaKey || e.ctrlKey;
+
+      if (mod) {
+        if (key === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) handleRedoRef.current();
+          else handleUndoRef.current();
+          return;
+        }
+        if (key === 'y') {
+          e.preventDefault();
+          handleRedoRef.current();
+          return;
+        }
+        if (key === 'x') {
+          e.preventDefault();
+          handleCutRef.current();
+          return;
+        }
+        if (key === 'c') {
+          e.preventDefault();
+          handleCopyRef.current();
+          return;
+        }
+        if (key === 'v') {
+          e.preventDefault();
+          handlePasteRef.current();
+          return;
+        }
+      }
+
+      if (key === 's' || key === 'S') {
+        e.preventDefault();
+        handleSplitIntoNotesRef.current();
+        return;
+      }
+      if (key === 'c' || key === 'C') {
+        if (!mod) {
+          e.preventDefault();
+          handleCombineIntoChordRef.current();
+          return;
+        }
+      }
+
+      if (key === '+' || key === '=') {
+        e.preventDefault();
+        if (e.repeat) return;
+        applyMutationRef.current((prev) => {
+          const selected = prev.filter((n) => n.selected);
+          if (selected.length === 0) return prev;
+          const expandedIds = expandSelectionWithChordMatesRef.current(
+            prev,
+            new Set(selected.map((n) => n.id))
+          );
+          return prev.map((n) => {
+            if (!expandedIds.has(n.id)) return n;
+            const newEndCol = Math.min(TEST_COLS - 1, n.endCol + 1);
+            return { ...n, endCol: newEndCol };
+          });
+        });
+        return;
+      }
+      if (key === '-') {
+        e.preventDefault();
+        if (e.repeat) return;
+        applyMutationRef.current((prev) => {
+          const selected = prev.filter((n) => n.selected);
+          if (selected.length === 0) return prev;
+          const expandedIds = expandSelectionWithChordMatesRef.current(
+            prev,
+            new Set(selected.map((n) => n.id))
+          );
+          return prev.map((n) => {
+            if (!expandedIds.has(n.id)) return n;
+            const newEndCol = Math.max(n.startCol, n.endCol - 1);
+            return { ...n, endCol: newEndCol };
+          });
+        });
+        return;
+      }
+
       const sel = selectedCellRef.current;
 
       if (key === 'Escape') {
@@ -1010,9 +1111,10 @@ function StateTestGrid() {
 
       applyMutationRef.current((prev) => {
         const selected = prev.filter((n) => n.selected);
-        if (selected.length !== 1) return prev;
+        if (selected.length === 0) return prev;
+        const selectedIds = new Set(selected.map((n) => n.id));
         return prev.map((n) =>
-          n.id === selected[0].id ? { ...n, value } : n
+          selectedIds.has(n.id) ? { ...n, value } : n
         );
       });
       e.preventDefault();
@@ -1021,7 +1123,7 @@ function StateTestGrid() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Cursor during resize (col-resize) and during drag (grabbing); use !important so it overrides child cursor styles
+  // Cursor during resize (col-resize), drag (grabbing), and marquee (crosshair); use !important so it overrides child cursor styles
   useEffect(() => {
     if (resizeState) {
       document.body.style.setProperty('cursor', 'col-resize', 'important');
@@ -1035,7 +1137,13 @@ function StateTestGrid() {
         document.body.style.removeProperty('cursor');
       };
     }
-  }, [resizeState, dragState]);
+    if (marqueeState || marqueePointerDown) {
+      document.body.style.setProperty('cursor', 'crosshair', 'important');
+      return () => {
+        document.body.style.removeProperty('cursor');
+      };
+    }
+  }, [resizeState, dragState, marqueeState, marqueePointerDown]);
 
   return (
     <div className="inline-block">
@@ -1100,7 +1208,7 @@ function StateTestGrid() {
           aria-label="Split into notes"
           className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
         >
-          <SplitSquareVertical className="w-4 h-4" />
+          <Maximize2 className="w-4 h-4" />
         </button>
         <button
           type="button"
@@ -1110,7 +1218,7 @@ function StateTestGrid() {
           aria-label="Combine into chord"
           className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
         >
-          <Layers className="w-4 h-4" />
+          <Minimize2 className="w-4 h-4" />
         </button>
         <button
           type="button"
@@ -1126,7 +1234,7 @@ function StateTestGrid() {
       <div className="rounded-lg border border-bg-tertiary bg-bg-secondary/80 p-4">
       <div
         ref={gridWrapperRef}
-        className={`relative select-none${dragState ? ' state-test-grid-cursor-grabbing' : ''}${resizeState ? ' state-test-grid-cursor-col-resize' : ''}`}
+        className={`relative select-none${dragState ? ' state-test-grid-cursor-grabbing' : ''}${resizeState ? ' state-test-grid-cursor-col-resize' : ''}${marqueeState || marqueePointerDown ? ' state-test-grid-cursor-crosshair' : ''}`}
         style={{
           width: TEST_COLS * COLUMN_WIDTH,
           height: TEST_ROWS * ROW_HEIGHT,
@@ -1220,13 +1328,18 @@ function StateTestGrid() {
             Array.from({ length: TEST_COLS }, (_, c) => {
               const isHover = hover?.row === r && hover?.col === c;
               const hasNote = findNoteAt(r, c);
+              const isSelectedEmpty =
+                !hasNote && selectedCell?.row === r && selectedCell?.col === c;
+              const cursorClass =
+                hasNote || isSelectedEmpty ? 'cursor-pointer' : 'cursor-default';
               return (
                 <div
                   key={`${r}-${c}`}
-                  className="relative flex items-center justify-center cursor-pointer"
+                  className={`relative flex items-center justify-center ${cursorClass}`}
                   onClick={(e) => handleCellClick(r, c, e)}
                   onMouseDown={(e) => {
                     if (hasNote || dragState || resizeState || marqueeState) return;
+                    setMarqueePointerDown(true);
                     pendingMarqueeRef.current = {
                       startRow: r,
                       startCol: c,

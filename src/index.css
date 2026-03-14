@@ -22,6 +22,9 @@
   --color-text-primary: #eeeeee;
   --color-text-secondary: #aaaaaa;
   --color-string: #888888;
+  /* Grid note chip: default note color and selection highlight */
+  --color-chip: #e11d48;
+  --color-chip-selected: #22d3ee;
 }
 
 body {
@@ -158,7 +161,7 @@ body {
   }
 }
 
-/* State test grid: force cursor during drag/resize so it overrides child elements (handles, cells) */
+/* State test grid: force cursor during drag/resize/marquee so it overrides child elements (handles, cells) */
 .state-test-grid-cursor-grabbing,
 .state-test-grid-cursor-grabbing * {
   cursor: grabbing !important;
@@ -166,4 +169,8 @@ body {
 .state-test-grid-cursor-col-resize,
 .state-test-grid-cursor-col-resize * {
   cursor: col-resize !important;
+}
+.state-test-grid-cursor-crosshair,
+.state-test-grid-cursor-crosshair * {
+  cursor: crosshair !important;
 }
