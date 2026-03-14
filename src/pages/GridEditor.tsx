@@ -9,11 +9,16 @@ import {
 import { getRiff, getMergedRiffList } from '../data/riffs';
 import { saveUserRiff, nextUserRiffId } from '../data/riffs/userRiffsStorage';
 import { useRiffHistory } from '../hooks/useRiffHistory';
+import { useRiffPlayback } from '../hooks/useRiffPlayback';
+import { useNoteTones } from '../hooks/useNoteTones';
+import { useMetronome } from '../hooks/useMetronome';
+import { STANDARD_TUNING } from '../data/tunings';
 import type { Riff } from '../types/riff';
 import {
   notesToEditorGrid,
   cellKey,
   getSubsPerBar,
+  gridNotesToRiffNotes,
   applyCellUpdateToNotes,
   updateNoteFretAtSlot,
   createNotesInSelection,
@@ -92,15 +97,14 @@ function subtractRangeFromIntervals(
   return result;
 }
 
-function StateTestGrid() {
-  const TEST_ROWS = 6;
-  const TEST_COLS = 12;
+type StateTestGridProps = {
+  totalColumns: number;
+  notes: StateTestNote[];
+  onNotesChange: (updater: (prev: StateTestNote[]) => StateTestNote[]) => void;
+};
 
-  const [notes, setNotes] = useState<StateTestNote[]>(() => [
-    { id: genNoteId(), row: 0, startCol: 1, endCol: 1, value: 0, selected: false, chordId: null },
-    { id: genNoteId(), row: 1, startCol: 3, endCol: 4, value: 5, selected: false, chordId: null },
-    { id: genNoteId(), row: 2, startCol: 5, endCol: 5, value: 7, selected: false, chordId: null },
-  ]);
+function StateTestGrid({ totalColumns, notes, onNotesChange }: StateTestGridProps) {
+  const TEST_ROWS = 6;
 
   type ClipboardItem = { rowOffset: number; startCol: number; endCol: number; value: number };
   const [clipboard, setClipboard] = useState<{ originRow: number; originCol: number; items: ClipboardItem[] } | null>(null);
@@ -111,14 +115,14 @@ function StateTestGrid() {
   const applyMutation = useCallback(
     (updater: (prev: StateTestNote[]) => StateTestNote[]) => {
       if (isUndoRedoRef.current) {
-        setNotes(updater);
+        onNotesChange(updater);
         return;
       }
       setUndoStack((s) => [...s, notesRef.current]);
       setRedoStack([]);
-      setNotes(updater);
+      onNotesChange(updater);
     },
-    []
+    [onNotesChange]
   );
   const applyMutationRef = useRef(applyMutation);
   applyMutationRef.current = applyMutation;
@@ -163,7 +167,6 @@ function StateTestGrid() {
   setMarqueePointerDownRef.current = setMarqueePointerDown;
   const digitBufferRef = useRef('');
   const suppressClickAfterDragRef = useRef(false);
-  const suppressClickAfterMarqueeRef = useRef(false);
   const pendingMarqueeRef = useRef<{
     startRow: number;
     startCol: number;
@@ -272,8 +275,8 @@ function StateTestGrid() {
       const pastedChordId = genChordId();
       const newNotes: StateTestNote[] = clipboard.items.map((item) => {
         const row = Math.max(0, Math.min(TEST_ROWS - 1, pasteRow + item.rowOffset));
-        const startCol = Math.max(0, Math.min(TEST_COLS - 1, pasteCol + item.startCol));
-        const endCol = Math.max(startCol, Math.min(TEST_COLS - 1, pasteCol + item.endCol));
+        const startCol = Math.max(0, Math.min(totalColumns - 1, pasteCol + item.startCol));
+        const endCol = Math.max(startCol, Math.min(totalColumns - 1, pasteCol + item.endCol));
         return {
           id: genNoteId(),
           row,
@@ -287,7 +290,7 @@ function StateTestGrid() {
       const dropFootprint = new Map<number, [number, number][]>();
       for (const n of newNotes) {
         const start = Math.max(0, n.startCol);
-        const end = Math.min(TEST_COLS - 1, n.endCol);
+        const end = Math.min(totalColumns - 1, n.endCol);
         if (!dropFootprint.has(n.row)) dropFootprint.set(n.row, []);
         dropFootprint.get(n.row)!.push([start, end]);
       }
@@ -328,7 +331,7 @@ function StateTestGrid() {
       return [...existingCleaned.map((n) => ({ ...n, selected: false })), ...newNotes];
     });
     if (selected.length === 0 && selectedCell != null) setSelectedCell(null);
-  }, [clipboard, notes, selectedCell, applyMutation, TEST_ROWS, TEST_COLS]);
+  }, [clipboard, notes, selectedCell, applyMutation, TEST_ROWS, totalColumns]);
   handlePasteRef.current = handlePaste;
 
   const handleSplitIntoNotes = useCallback(() => {
@@ -378,21 +381,23 @@ function StateTestGrid() {
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return;
     isUndoRedoRef.current = true;
+    const snapshot = undoStack[undoStack.length - 1];
     setRedoStack((r) => [...r, notes]);
-    setNotes(undoStack[undoStack.length - 1]);
+    onNotesChange(() => snapshot);
     setUndoStack((s) => s.slice(0, -1));
     isUndoRedoRef.current = false;
-  }, [undoStack, notes]);
+  }, [undoStack, notes, onNotesChange]);
   handleUndoRef.current = handleUndo;
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return;
     isUndoRedoRef.current = true;
+    const snapshot = redoStack[redoStack.length - 1];
     setUndoStack((s) => [...s, notes]);
-    setNotes(redoStack[redoStack.length - 1]);
+    onNotesChange(() => snapshot);
     setRedoStack((r) => r.slice(0, -1));
     isUndoRedoRef.current = false;
-  }, [redoStack, notes]);
+  }, [redoStack, notes, onNotesChange]);
   handleRedoRef.current = handleRedo;
 
   const findNoteAt = useCallback(
@@ -407,21 +412,17 @@ function StateTestGrid() {
         suppressClickAfterDragRef.current = false;
         return;
       }
-      if (suppressClickAfterMarqueeRef.current) {
-        suppressClickAfterMarqueeRef.current = false;
-        return;
-      }
       const note = findNoteAt(row, col);
       if (!note) {
         if (e.shiftKey) return;
         setSelectedCell({ row, col });
-        setNotes((prev) => prev.map((n) => ({ ...n, selected: false })));
+        onNotesChange((prev) => prev.map((n) => ({ ...n, selected: false })));
         digitBufferRef.current = '';
         return;
       }
       setSelectedCell(null);
       if (e.shiftKey) {
-        setNotes((prev) => {
+        onNotesChange((prev) => {
           const currentIds = new Set(prev.filter((n) => n.selected).map((n) => n.id));
           const expanded = expandSelectionWithChordMates(prev, currentIds);
           const noteInSelection = expanded.has(note.id);
@@ -439,14 +440,14 @@ function StateTestGrid() {
       const wasOnlySelected =
         note.selected && notes.filter((n) => n.selected).length === 1;
       if (wasOnlySelected) {
-        setNotes((prev) => {
+        onNotesChange((prev) => {
           const deselectIds = note.chordId
             ? new Set(prev.filter((n) => n.chordId === note.chordId).map((n) => n.id))
             : new Set([note.id]);
           return prev.map((n) => ({ ...n, selected: n.selected && !deselectIds.has(n.id) }));
         });
       } else {
-        setNotes((prev) => {
+        onNotesChange((prev) => {
           const primaryIds = new Set([note.id]);
           const expanded = expandSelectionWithChordMates(prev, primaryIds);
           return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
@@ -466,7 +467,7 @@ function StateTestGrid() {
     const wasOnlySelected =
       note.selected && notes.filter((n) => n.selected).length === 1;
     if (e.shiftKey) {
-      setNotes((prev) => {
+      onNotesChange((prev) => {
         const currentIds = new Set(prev.filter((n) => n.selected).map((n) => n.id));
         const expanded = expandSelectionWithChordMates(prev, currentIds);
         const chordMateIds = note.chordId
@@ -478,7 +479,7 @@ function StateTestGrid() {
         return prev.map((n) => ({ ...n, selected: nextIds.has(n.id) }));
       });
     } else if (!note.selected) {
-      setNotes((prev) => {
+      onNotesChange((prev) => {
         const primaryIds = new Set([note.id]);
         const expanded = expandSelectionWithChordMates(prev, primaryIds);
         return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
@@ -500,7 +501,7 @@ function StateTestGrid() {
     e.stopPropagation();
     if (resizeState || dragState) return;
     setSelectedCell(null);
-    setNotes((prev) => {
+    onNotesChange((prev) => {
       const primaryIds = new Set([note.id]);
       const expanded = expandSelectionWithChordMates(prev, primaryIds);
       return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
@@ -541,7 +542,7 @@ function StateTestGrid() {
             const minW = COLUMN_WIDTH;
             let visualWidthPx: number;
             if (edge === 'right') {
-              const visualRight = Math.max(noteLeftPx + minW, Math.min(localX, TEST_COLS * COLUMN_WIDTH));
+              const visualRight = Math.max(noteLeftPx + minW, Math.min(localX, totalColumns * COLUMN_WIDTH));
               visualWidthPx = visualRight - noteLeftPx;
             } else {
               const visualLeft = Math.min(noteRightPx - minW, Math.max(0, localX));
@@ -565,7 +566,7 @@ function StateTestGrid() {
             const col = Math.floor(localX / COLUMN_WIDTH);
             const row = Math.floor(localY / ROW_HEIGHT);
             const currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
-            const currentCol = Math.max(0, Math.min(TEST_COLS - 1, col));
+            const currentCol = Math.max(0, Math.min(totalColumns - 1, col));
             setMarqueeState({
               startRow: pendingMarquee.startRow,
               startCol: pendingMarquee.startCol,
@@ -586,12 +587,12 @@ function StateTestGrid() {
           const col = Math.floor(localX / COLUMN_WIDTH);
           const row = Math.floor(localY / ROW_HEIGHT);
           const currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
-          const currentCol = Math.max(0, Math.min(TEST_COLS - 1, col));
+          const currentCol = Math.max(0, Math.min(totalColumns - 1, col));
           const minRow = Math.min(marqueeState.startRow, currentRow);
           const maxRow = Math.max(marqueeState.startRow, currentRow);
           const minCol = Math.min(marqueeState.startCol, currentCol);
           const maxCol = Math.max(marqueeState.startCol, currentCol);
-          setNotes((prev) => {
+          onNotesChange((prev) => {
             const intersectsIds = new Set(
               prev
                 .filter(
@@ -629,7 +630,7 @@ function StateTestGrid() {
           const col = Math.floor(localX / COLUMN_WIDTH);
           const row = Math.floor(localY / ROW_HEIGHT);
           let currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
-          const currentCol = Math.max(0, Math.min(TEST_COLS - 1, col));
+          const currentCol = Math.max(0, Math.min(totalColumns - 1, col));
           const note = notesRef.current.find((n) => n.id === dragState.noteId);
           const isFullHeightChord =
             note?.chordId &&
@@ -713,10 +714,10 @@ function StateTestGrid() {
             if (edge === 'right') {
                 const visualRightPx = Math.max(
                   (anchorStartCol + 1) * COLUMN_WIDTH,
-                  Math.min(localX, TEST_COLS * COLUMN_WIDTH)
+                  Math.min(localX, totalColumns * COLUMN_WIDTH)
                 );
                 newEndCol = Math.min(
-                  TEST_COLS - 1,
+                  totalColumns - 1,
                   Math.max(anchorStartCol, Math.max(0, Math.round(visualRightPx / COLUMN_WIDTH) - 1))
                 );
                 newStartCol = note.startCol;
@@ -728,7 +729,7 @@ function StateTestGrid() {
                 );
                 newStartCol = Math.min(
                   anchorEndCol,
-                  Math.max(0, Math.min(Math.round(visualLeftPx / COLUMN_WIDTH), TEST_COLS - 1))
+                  Math.max(0, Math.min(Math.round(visualLeftPx / COLUMN_WIDTH), totalColumns - 1))
                 );
                 newEndCol = note.endCol;
               }
@@ -791,7 +792,6 @@ function StateTestGrid() {
         setMarqueeState(null);
         setMarqueePointerDownRef.current(false);
         setSelectedCell(null);
-        suppressClickAfterMarqueeRef.current = true;
         return;
       }
       if (pendingMarqueeRef.current) {
@@ -813,7 +813,7 @@ function StateTestGrid() {
           currentRow >= 0 &&
           currentRow < TEST_ROWS &&
           currentCol >= 0 &&
-          currentCol < TEST_COLS &&
+          currentCol < totalColumns &&
           (currentRow !== anchorRow || currentCol !== anchorCol);
 
         if (isValidDrop) {
@@ -826,12 +826,12 @@ function StateTestGrid() {
               const newRow = Math.max(0, Math.min(TEST_ROWS - 1, n.row + deltaRow));
               const newStartCol = Math.max(
                 0,
-                Math.min(TEST_COLS - 1, n.startCol + deltaCol)
+                Math.min(totalColumns - 1, n.startCol + deltaCol)
               );
               const span = n.endCol - n.startCol + 1;
               const newEndCol = Math.max(
                 newStartCol,
-                Math.min(TEST_COLS - 1, newStartCol + span - 1)
+                Math.min(totalColumns - 1, newStartCol + span - 1)
               );
               if (!dropFootprint.has(newRow)) dropFootprint.set(newRow, []);
               dropFootprint.get(newRow)!.push([newStartCol, newEndCol]);
@@ -845,12 +845,12 @@ function StateTestGrid() {
                 const newRow = Math.max(0, Math.min(TEST_ROWS - 1, n.row + deltaRow));
                 const newStartCol = Math.max(
                   0,
-                  Math.min(TEST_COLS - 1, n.startCol + deltaCol)
+                  Math.min(totalColumns - 1, n.startCol + deltaCol)
                 );
                 const span = n.endCol - n.startCol + 1;
                 const newEndCol = Math.max(
                   newStartCol,
-                  Math.min(TEST_COLS - 1, newStartCol + span - 1)
+                  Math.min(totalColumns - 1, newStartCol + span - 1)
                 );
                 return [
                   {
@@ -894,7 +894,7 @@ function StateTestGrid() {
           });
           suppressClickAfterDragRef.current = true;
         } else {
-          setNotes((prev) =>
+          onNotesChange((prev) =>
             prev.map((n) => ({ ...n, selected: false }))
           );
           setSelectedCellRef.current(null);
@@ -911,7 +911,7 @@ function StateTestGrid() {
               anchorCol <= n.endCol
           );
           if (note) {
-            setNotes((prev) =>
+            onNotesChange((prev) =>
               prev.map((n) => (n.id === note.id ? { ...n, selected: false } : n))
             );
           }
@@ -924,7 +924,7 @@ function StateTestGrid() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, resizeState, marqueeState, TEST_ROWS, TEST_COLS]);
+  }, [dragState, resizeState, marqueeState, TEST_ROWS, totalColumns]);
 
   // Digit keys: create note at selected empty cell, or update single selected note. Backspace/Delete: clear selected cell or remove selected notes.
   useEffect(() => {
@@ -994,7 +994,7 @@ function StateTestGrid() {
           );
           return prev.map((n) => {
             if (!expandedIds.has(n.id)) return n;
-            const newEndCol = Math.min(TEST_COLS - 1, n.endCol + 1);
+            const newEndCol = Math.min(totalColumns - 1, n.endCol + 1);
             return { ...n, endCol: newEndCol };
           });
         });
@@ -1137,13 +1137,13 @@ function StateTestGrid() {
         document.body.style.removeProperty('cursor');
       };
     }
-    if (marqueeState || marqueePointerDown) {
+    if (marqueeState) {
       document.body.style.setProperty('cursor', 'crosshair', 'important');
       return () => {
         document.body.style.removeProperty('cursor');
       };
     }
-  }, [resizeState, dragState, marqueeState, marqueePointerDown]);
+  }, [resizeState, dragState, marqueeState]);
 
   return (
     <div className="inline-block">
@@ -1234,9 +1234,9 @@ function StateTestGrid() {
       <div className="rounded-lg border border-bg-tertiary bg-bg-secondary/80 p-4">
       <div
         ref={gridWrapperRef}
-        className={`relative select-none${dragState ? ' state-test-grid-cursor-grabbing' : ''}${resizeState ? ' state-test-grid-cursor-col-resize' : ''}${marqueeState || marqueePointerDown ? ' state-test-grid-cursor-crosshair' : ''}`}
+        className={`relative select-none${dragState ? ' state-test-grid-cursor-grabbing' : ''}${resizeState ? ' state-test-grid-cursor-col-resize' : ''}${marqueeState ? ' state-test-grid-cursor-crosshair' : ''}`}
         style={{
-          width: TEST_COLS * COLUMN_WIDTH,
+          width: totalColumns * COLUMN_WIDTH,
           height: TEST_ROWS * ROW_HEIGHT,
         }}
         onMouseLeave={() => {
@@ -1249,7 +1249,7 @@ function StateTestGrid() {
       >
         {/* Dot grid at intersections */}
         {Array.from({ length: TEST_ROWS + 1 }, (_, r) =>
-          Array.from({ length: TEST_COLS + 1 }, (_, c) => (
+          Array.from({ length: totalColumns + 1 }, (_, c) => (
             <div
               key={`dot-${r}-${c}`}
               className="absolute rounded-full bg-bg-tertiary/70"
@@ -1278,12 +1278,12 @@ function StateTestGrid() {
               const newRow = Math.max(0, Math.min(TEST_ROWS - 1, note.row + deltaRow));
               const newStartCol = Math.max(
                 0,
-                Math.min(TEST_COLS - 1, note.startCol + deltaCol)
+                Math.min(totalColumns - 1, note.startCol + deltaCol)
               );
               const span = note.endCol - note.startCol + 1;
               const newEndCol = Math.max(
                 newStartCol,
-                Math.min(TEST_COLS - 1, newStartCol + span - 1)
+                Math.min(totalColumns - 1, newStartCol + span - 1)
               );
               const widthCols = newEndCol - newStartCol + 1;
               if (widthCols <= 0) return null;
@@ -1320,12 +1320,12 @@ function StateTestGrid() {
         <div
           className="absolute inset-0 grid"
           style={{
-            gridTemplateColumns: `repeat(${TEST_COLS}, ${COLUMN_WIDTH}px)`,
+            gridTemplateColumns: `repeat(${totalColumns}, ${COLUMN_WIDTH}px)`,
             gridTemplateRows: `repeat(${TEST_ROWS}, ${ROW_HEIGHT}px)`,
           }}
         >
           {Array.from({ length: TEST_ROWS }, (_, r) =>
-            Array.from({ length: TEST_COLS }, (_, c) => {
+            Array.from({ length: totalColumns }, (_, c) => {
               const isHover = hover?.row === r && hover?.col === c;
               const hasNote = findNoteAt(r, c);
               const isSelectedEmpty =
@@ -1610,10 +1610,57 @@ type DragState =
       currentSlot: number;
     };
 
+const PHASE1_BARS = 2;
+const PHASE1_SUBS_PER_BAR = 16;
+const PHASE1_TOTAL_COLUMNS = PHASE1_BARS * PHASE1_SUBS_PER_BAR;
+
 export function GridEditor() {
   const list = getMergedRiffList();
   const [riffId, setRiffId] = useState<string>(list[0]?.id ?? '');
   const [riff, setRiffState] = useState<Riff | null>(null);
+  const [gridNotes, setGridNotes] = useState<StateTestNote[]>(() => []);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const effectiveRiff = useMemo(
+    () => ({
+      ...defaultRiff('grid-phase1', 'Phrase'),
+      notes: gridNotesToRiffNotes(gridNotes, PHASE1_BARS, PHASE1_SUBS_PER_BAR),
+      lengthBars: PHASE1_BARS,
+      timeSignature: { num: 4, denom: 4 },
+      tempo: 100,
+    }),
+    [gridNotes]
+  );
+  const {
+    onTick: playbackOnTick,
+    reset: playbackReset,
+    getCurrentColumn,
+  } = useRiffPlayback(effectiveRiff, PHASE1_BARS);
+  const { playColumn } = useNoteTones(isPlaying, 0.3, STANDARD_TUNING);
+  const handleTick = useCallback(() => {
+    playbackOnTick();
+    const column = getCurrentColumn();
+    if (column) playColumn(column);
+  }, [playbackOnTick, getCurrentColumn, playColumn]);
+  const handleBeat = useCallback(() => {}, []);
+  const handleCountIn = useCallback(() => {}, []);
+  const { reset: metronomeReset } = useMetronome(
+    100,
+    4,
+    isPlaying,
+    handleBeat,
+    handleTick,
+    handleCountIn,
+    0.3,
+    '4/4',
+    0
+  );
+  const handlePlayToggle = useCallback(() => setIsPlaying((p) => !p), []);
+  const handleReset = useCallback(() => {
+    playbackReset();
+    metronomeReset();
+  }, [playbackReset, metronomeReset]);
+
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [chordCells, setChordCells] = useState<Set<string>>(new Set());
   const [dragState, setDragState] = useState<DragState>(null);
@@ -2202,9 +2249,9 @@ export function GridEditor() {
         onRiffIdChange={setRiffId}
         onRiffChange={handleRiffChange}
         onNewRiff={handleNewRiff}
-        isPlaying={false}
-        onPlayToggle={() => {}}
-        onReset={() => {}}
+        isPlaying={isPlaying}
+        onPlayToggle={handlePlayToggle}
+        onReset={handleReset}
         onCopyAsJson={handleCopyAsJson}
         onUndo={handleUndo}
         onRedo={handleRedo}
@@ -2220,9 +2267,13 @@ export function GridEditor() {
          
           <div>
            
-            <StateTestGrid />
+            <StateTestGrid
+              totalColumns={PHASE1_TOTAL_COLUMNS}
+              notes={gridNotes}
+              onNotesChange={(updater) => setGridNotes((prev) => updater(prev))}
+            />
             <p className="mb-2 text-xs text-text-secondary">
-              state test grid (6×12, click empty to add value, click note to toggle selection)
+              Grid (6×{PHASE1_TOTAL_COLUMNS}, 2 bars 4/4 — click empty to add note, click note to select)
             </p>
           </div>
         </div>

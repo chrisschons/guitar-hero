@@ -64,6 +64,45 @@ export function getSubsPerBar(riff: Riff): number {
   return riff.timeSignature ? getSubdivisionsPerBar(riff.timeSignature) : 16;
 }
 
+/** Minimal grid note shape for converting grid state to riff.notes. */
+export type GridNoteForRiff = {
+  row: number;
+  startCol: number;
+  endCol: number;
+  value: number;
+  id?: string;
+};
+
+/**
+ * Convert grid notes (editor source of truth) to NoteEvent[] for playback/save.
+ * Slot index → bar (1-based) and subdivision (1-based); duration = endCol - startCol + 1.
+ */
+export function gridNotesToRiffNotes(
+  gridNotes: GridNoteForRiff[],
+  bars: number,
+  subsPerBar: number
+): NoteEvent[] {
+  const totalSlots = bars * subsPerBar;
+  const notes: NoteEvent[] = [];
+  for (const g of gridNotes) {
+    if (g.startCol >= totalSlots) continue;
+    const endClamped = Math.min(totalSlots - 1, g.endCol);
+    const bar = Math.floor(g.startCol / subsPerBar) + 1;
+    const subdivision = (g.startCol % subsPerBar) + 1;
+    const durationSubdivisions = endClamped - g.startCol + 1;
+    const note: NoteEvent = {
+      string: g.row + 1,
+      fret: g.value,
+      bar,
+      subdivision,
+    };
+    if (g.id != null && g.id !== '') note.id = g.id;
+    if (durationSubdivisions > 1) note.durationSubdivisions = durationSubdivisions;
+    notes.push(note);
+  }
+  return notes;
+}
+
 // --- Re-export cell update (no merge) ---
 export function applyCellUpdateToNotes(
   riff: Riff,
