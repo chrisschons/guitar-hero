@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, Fragment } from 'react';
 import { EditorHeader } from '../components/EditorHeader';
 import {
   ContextMenu,
@@ -24,6 +24,16 @@ import {
 } from '../core/gridEditorModel';
 import { applyDurationResizeToNotes } from '../core/riffGrid';
 import { GridNoteChip } from '../components/GridNoteChip';
+import {
+  Undo2,
+  Redo2,
+  Copy,
+  Scissors,
+  ClipboardPaste,
+  SplitSquareVertical,
+  Layers,
+  Trash2,
+} from 'lucide-react';
 const COLUMN_WIDTH = 68;
 const ROW_HEIGHT = 32;
 const NUM_STRINGS = 6;
@@ -35,23 +45,91 @@ type StateTestNote = {
   endCol: number;
   value: number;
   selected: boolean;
+  /** Notes with the same chordId move/resize/cut/copy/delete as a vertical chord group. */
+  chordId: string | null;
 };
 
 function genNoteId() {
   return `note-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function genChordId() {
+  return `chord-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Merge overlapping or adjacent column ranges [startCol, endCol] into disjoint ranges. */
+function mergeColumnRanges(ranges: [number, number][]): [number, number][] {
+  if (ranges.length === 0) return [];
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [[...sorted[0]]];
+  for (let i = 1; i < sorted.length; i++) {
+    const [s, e] = sorted[i];
+    const last = merged[merged.length - 1];
+    if (s <= last[1] + 1) {
+      last[1] = Math.max(last[1], e);
+    } else {
+      merged.push([s, e]);
+    }
+  }
+  return merged;
+}
+
+/** Punch out a hole [hStart, hEnd] from a list of disjoint intervals. */
+function subtractRangeFromIntervals(
+  intervals: [number, number][],
+  hole: [number, number]
+): [number, number][] {
+  const [hStart, hEnd] = hole;
+  const result: [number, number][] = [];
+  for (const [lo, hi] of intervals) {
+    if (hi < hStart || lo > hEnd) {
+      result.push([lo, hi]);
+    } else {
+      if (lo < hStart) result.push([lo, hStart - 1]);
+      if (hi > hEnd) result.push([hEnd + 1, hi]);
+    }
+  }
+  return result;
+}
+
 function StateTestGrid() {
-  const TEST_ROWS = 4;
-  const TEST_COLS = 10;
+  const TEST_ROWS = 6;
+  const TEST_COLS = 12;
 
   const [notes, setNotes] = useState<StateTestNote[]>(() => [
-    { id: genNoteId(), row: 0, startCol: 1, endCol: 1, value: 0, selected: false },
-    { id: genNoteId(), row: 1, startCol: 3, endCol: 4, value: 5, selected: false },
-    { id: genNoteId(), row: 2, startCol: 5, endCol: 5, value: 7, selected: false },
+    { id: genNoteId(), row: 0, startCol: 1, endCol: 1, value: 0, selected: false, chordId: null },
+    { id: genNoteId(), row: 1, startCol: 3, endCol: 4, value: 5, selected: false, chordId: null },
+    { id: genNoteId(), row: 2, startCol: 5, endCol: 5, value: 7, selected: false, chordId: null },
   ]);
 
+  type ClipboardItem = { rowOffset: number; startCol: number; endCol: number; value: number };
+  const [clipboard, setClipboard] = useState<{ originRow: number; originCol: number; items: ClipboardItem[] } | null>(null);
+  const [undoStack, setUndoStack] = useState<StateTestNote[][]>([]);
+  const [redoStack, setRedoStack] = useState<StateTestNote[][]>([]);
+  const isUndoRedoRef = useRef(false);
+
+  const applyMutation = useCallback(
+    (updater: (prev: StateTestNote[]) => StateTestNote[]) => {
+      if (isUndoRedoRef.current) {
+        setNotes(updater);
+        return;
+      }
+      setUndoStack((s) => [...s, notesRef.current]);
+      setRedoStack([]);
+      setNotes(updater);
+    },
+    []
+  );
+  const applyMutationRef = useRef(applyMutation);
+  applyMutationRef.current = applyMutation;
+
   const [hover, setHover] = useState<{ row: number; col: number } | null>(null);
+  /** When user clicks an empty cell, we select the cell (no note yet). Digit then creates a note. */
+  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
+  const selectedCellRef = useRef(selectedCell);
+  selectedCellRef.current = selectedCell;
+  const setSelectedCellRef = useRef(setSelectedCell);
+  setSelectedCellRef.current = setSelectedCell;
   const [dragState, setDragState] = useState<{
     noteId: string;
     anchorRow: number;
@@ -74,8 +152,21 @@ function StateTestGrid() {
     visualWidthPx: number;
   } | null>(null);
   const [dragGhost, setDragGhost] = useState<{ clientX: number; clientY: number } | null>(null);
+  const [marqueeState, setMarqueeState] = useState<{
+    startRow: number;
+    startCol: number;
+    currentRow: number;
+    currentCol: number;
+  } | null>(null);
   const digitBufferRef = useRef('');
   const suppressClickAfterDragRef = useRef(false);
+  const suppressClickAfterMarqueeRef = useRef(false);
+  const pendingMarqueeRef = useRef<{
+    startRow: number;
+    startCol: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const pendingDragRef = useRef<{
     noteId: string;
@@ -85,7 +176,7 @@ function StateTestGrid() {
     clientY: number;
     wasOnlySelected: boolean;
   } | null>(null);
-  const handleCellClickRef = useRef<(row: number, col: number) => void>(() => {});
+  const handleCellClickRef = useRef<(row: number, col: number, e: React.MouseEvent) => void>(() => {});
   const notesRef = useRef(notes);
   notesRef.current = notes;
   const resizeLatestRef = useRef<{ localX: number } | null>(null);
@@ -100,6 +191,192 @@ function StateTestGrid() {
   const RESIZE_HANDLE_WIDTH_PX = 14;
   const NOTE_CHIP_PADDING_PX = 3;
 
+  /** Expand a set of selected note ids to include all chord mates (notes with same chordId). */
+  const expandSelectionWithChordMates = useCallback(
+    (noteList: StateTestNote[], selectedIds: Set<string>): Set<string> => {
+      const expanded = new Set(selectedIds);
+      for (const n of noteList) {
+        if (n.chordId && selectedIds.has(n.id)) {
+          for (const m of noteList) {
+            if (m.chordId === n.chordId) expanded.add(m.id);
+          }
+        }
+      }
+      return expanded;
+    },
+    []
+  );
+  const expandSelectionWithChordMatesRef = useRef(expandSelectionWithChordMates);
+  expandSelectionWithChordMatesRef.current = expandSelectionWithChordMates;
+
+  const handleCopy = useCallback(() => {
+    const selected = notes.filter((n) => n.selected);
+    if (selected.length === 0) return;
+    const originRow = Math.min(...selected.map((n) => n.row));
+    const originCol = Math.min(...selected.map((n) => n.startCol));
+    setClipboard({
+      originRow,
+      originCol,
+      items: selected.map((n) => ({
+        rowOffset: n.row - originRow,
+        startCol: n.startCol - originCol,
+        endCol: n.endCol - originCol,
+        value: n.value,
+      })),
+    });
+  }, [notes]);
+
+  const handleCut = useCallback(() => {
+    const selected = notes.filter((n) => n.selected);
+    if (selected.length === 0) return;
+    const originRow = Math.min(...selected.map((n) => n.row));
+    const originCol = Math.min(...selected.map((n) => n.startCol));
+    setClipboard({
+      originRow,
+      originCol,
+      items: selected.map((n) => ({
+        rowOffset: n.row - originRow,
+        startCol: n.startCol - originCol,
+        endCol: n.endCol - originCol,
+        value: n.value,
+      })),
+    });
+    applyMutation((prev) => prev.filter((n) => !n.selected));
+  }, [notes, applyMutation]);
+
+  const handlePaste = useCallback(() => {
+    if (!clipboard || clipboard.items.length === 0) return;
+    const pasteRow = (() => {
+      const selected = notes.filter((n) => n.selected);
+      if (selected.length === 0) return 0;
+      return Math.min(...selected.map((n) => n.row));
+    })();
+    const pasteCol = (() => {
+      const selected = notes.filter((n) => n.selected);
+      if (selected.length === 0) return 0;
+      return Math.min(...selected.map((n) => n.startCol));
+    })();
+    applyMutation((prev) => {
+      const pastedChordId = genChordId();
+      const newNotes: StateTestNote[] = clipboard.items.map((item) => {
+        const row = Math.max(0, Math.min(TEST_ROWS - 1, pasteRow + item.rowOffset));
+        const startCol = Math.max(0, Math.min(TEST_COLS - 1, pasteCol + item.startCol));
+        const endCol = Math.max(startCol, Math.min(TEST_COLS - 1, pasteCol + item.endCol));
+        return {
+          id: genNoteId(),
+          row,
+          startCol,
+          endCol,
+          value: item.value,
+          selected: true,
+          chordId: pastedChordId,
+        };
+      });
+      const dropFootprint = new Map<number, [number, number][]>();
+      for (const n of newNotes) {
+        const start = Math.max(0, n.startCol);
+        const end = Math.min(TEST_COLS - 1, n.endCol);
+        if (!dropFootprint.has(n.row)) dropFootprint.set(n.row, []);
+        dropFootprint.get(n.row)!.push([start, end]);
+      }
+      for (const row of dropFootprint.keys()) {
+        dropFootprint.set(row, mergeColumnRanges(dropFootprint.get(row)!));
+      }
+      const brokenChordIds = new Set<string>();
+      const existing = prev.flatMap((n) => {
+        if (!dropFootprint.has(n.row)) return [n];
+        const dropRanges = dropFootprint.get(n.row)!;
+        let intervals: [number, number][] = [[n.startCol, n.endCol]];
+        for (const hole of dropRanges) {
+          intervals = subtractRangeFromIntervals(intervals, hole);
+        }
+        if (intervals.length === 0) {
+          if (n.chordId) brokenChordIds.add(n.chordId);
+          return [];
+        }
+        // No actual overlap: footprint didn't touch this note, leave it unchanged
+        if (
+          intervals.length === 1 &&
+          intervals[0][0] === n.startCol &&
+          intervals[0][1] === n.endCol
+        )
+          return [n];
+        if (n.chordId) brokenChordIds.add(n.chordId);
+        return intervals.map(([a, b]) => ({
+          ...n,
+          id: genNoteId(),
+          startCol: a,
+          endCol: b,
+          chordId: null,
+        }));
+      });
+      const existingCleaned = existing.map((n) =>
+        n.chordId && brokenChordIds.has(n.chordId) ? { ...n, chordId: null } : n
+      );
+      return [...existingCleaned.map((n) => ({ ...n, selected: false })), ...newNotes];
+    });
+  }, [clipboard, notes, applyMutation, TEST_ROWS, TEST_COLS]);
+
+  const handleSplitIntoNotes = useCallback(() => {
+    const selected = notes.filter((n) => n.selected);
+    if (selected.length === 0) return;
+    const hasSpanning = selected.some((n) => n.startCol < n.endCol);
+    if (!hasSpanning) return;
+    applyMutation((prev) =>
+      prev.flatMap((n) => {
+        if (!n.selected || n.startCol >= n.endCol) return [n];
+        return Array.from(
+          { length: n.endCol - n.startCol + 1 },
+          (_, i) => ({
+            ...n,
+            id: genNoteId(),
+            startCol: n.startCol + i,
+            endCol: n.startCol + i,
+            chordId: null,
+          })
+        );
+      })
+    );
+  }, [notes, applyMutation]);
+
+  const handleCombineIntoChord = useCallback(() => {
+    const selected = notes.filter((n) => n.selected);
+    if (selected.length < 2) return;
+    applyMutation((prev) => {
+      const selectedIds = new Set(selected.map((n) => n.id));
+      const minStart = Math.min(...selected.map((n) => n.startCol));
+      const maxEnd = Math.max(...selected.map((n) => n.endCol));
+      const chordId = genChordId();
+      return prev.map((n) =>
+        selectedIds.has(n.id)
+          ? { ...n, chordId, startCol: minStart, endCol: maxEnd }
+          : n
+      );
+    });
+  }, [notes, applyMutation]);
+
+  const handleClearAll = useCallback(() => {
+    applyMutation(() => []);
+  }, [applyMutation]);
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    isUndoRedoRef.current = true;
+    setRedoStack((r) => [...r, notes]);
+    setNotes(undoStack[undoStack.length - 1]);
+    setUndoStack((s) => s.slice(0, -1));
+    isUndoRedoRef.current = false;
+  }, [undoStack, notes]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    isUndoRedoRef.current = true;
+    setUndoStack((s) => [...s, notes]);
+    setNotes(redoStack[redoStack.length - 1]);
+    setRedoStack((r) => r.slice(0, -1));
+    isUndoRedoRef.current = false;
+  }, [redoStack, notes]);
+
   const findNoteAt = useCallback(
     (r: number, c: number) =>
       notes.find((n) => n.row === r && c >= n.startCol && c <= n.endCol) ?? null,
@@ -107,24 +384,36 @@ function StateTestGrid() {
   );
 
   const handleCellClick = useCallback(
-    (row: number, col: number) => {
+    (row: number, col: number, e: React.MouseEvent) => {
       if (suppressClickAfterDragRef.current) {
         suppressClickAfterDragRef.current = false;
         return;
       }
+      if (suppressClickAfterMarqueeRef.current) {
+        suppressClickAfterMarqueeRef.current = false;
+        return;
+      }
       const note = findNoteAt(row, col);
       if (!note) {
+        if (e.shiftKey) return;
+        setSelectedCell({ row, col });
+        setNotes((prev) => prev.map((n) => ({ ...n, selected: false })));
+        digitBufferRef.current = '';
+        return;
+      }
+      setSelectedCell(null);
+      if (e.shiftKey) {
         setNotes((prev) => {
-          const next = prev.map((n) => ({ ...n, selected: false }));
-          next.push({
-            id: genNoteId(),
-            row,
-            startCol: col,
-            endCol: col,
-            value: 0,
-            selected: true,
-          });
-          return next;
+          const currentIds = new Set(prev.filter((n) => n.selected).map((n) => n.id));
+          const expanded = expandSelectionWithChordMates(prev, currentIds);
+          const noteInSelection = expanded.has(note.id);
+          const chordMateIds = note.chordId
+            ? prev.filter((n) => n.chordId === note.chordId).map((n) => n.id)
+            : [note.id];
+          const nextIds = new Set(expanded);
+          if (noteInSelection) chordMateIds.forEach((id) => nextIds.delete(id));
+          else chordMateIds.forEach((id) => nextIds.add(id));
+          return prev.map((n) => ({ ...n, selected: nextIds.has(n.id) }));
         });
         digitBufferRef.current = '';
         return;
@@ -132,22 +421,22 @@ function StateTestGrid() {
       const wasOnlySelected =
         note.selected && notes.filter((n) => n.selected).length === 1;
       if (wasOnlySelected) {
-        setNotes((prev) =>
-          prev.map((n) =>
-            n.id === note.id ? { ...n, selected: false } : n
-          )
-        );
+        setNotes((prev) => {
+          const deselectIds = note.chordId
+            ? new Set(prev.filter((n) => n.chordId === note.chordId).map((n) => n.id))
+            : new Set([note.id]);
+          return prev.map((n) => ({ ...n, selected: n.selected && !deselectIds.has(n.id) }));
+        });
       } else {
-        setNotes((prev) =>
-          prev.map((n) => ({
-            ...n,
-            selected: n.id === note.id,
-          }))
-        );
+        setNotes((prev) => {
+          const primaryIds = new Set([note.id]);
+          const expanded = expandSelectionWithChordMates(prev, primaryIds);
+          return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
+        });
       }
       digitBufferRef.current = '';
     },
-    [notes, findNoteAt]
+    [notes, findNoteAt, applyMutation, expandSelectionWithChordMates]
   );
   handleCellClickRef.current = handleCellClick;
 
@@ -157,12 +446,26 @@ function StateTestGrid() {
     if (dragState || resizeState) return;
     const wasOnlySelected =
       note.selected && notes.filter((n) => n.selected).length === 1;
-    setNotes((prev) =>
-      prev.map((n) => ({
-        ...n,
-        selected: n.id === note.id,
-      }))
-    );
+    if (e.shiftKey) {
+      setNotes((prev) => {
+        const currentIds = new Set(prev.filter((n) => n.selected).map((n) => n.id));
+        const expanded = expandSelectionWithChordMates(prev, currentIds);
+        const chordMateIds = note.chordId
+          ? prev.filter((n) => n.chordId === note.chordId).map((n) => n.id)
+          : [note.id];
+        const nextIds = new Set(expanded);
+        if (expanded.has(note.id)) chordMateIds.forEach((id) => nextIds.delete(id));
+        else chordMateIds.forEach((id) => nextIds.add(id));
+        return prev.map((n) => ({ ...n, selected: nextIds.has(n.id) }));
+      });
+    } else if (!note.selected) {
+      setNotes((prev) => {
+        const primaryIds = new Set([note.id]);
+        const expanded = expandSelectionWithChordMates(prev, primaryIds);
+        return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
+      });
+    }
+    // If note already selected (and no shift): keep current selection so group drag moves all
     digitBufferRef.current = '';
     pendingDragRef.current = {
       noteId: note.id,
@@ -177,9 +480,11 @@ function StateTestGrid() {
   const handleResizeHandleMouseDown = (note: StateTestNote, edge: 'left' | 'right', e: React.MouseEvent) => {
     e.stopPropagation();
     if (resizeState || dragState) return;
-    setNotes((prev) =>
-      prev.map((n) => ({ ...n, selected: n.id === note.id }))
-    );
+    setNotes((prev) => {
+      const primaryIds = new Set([note.id]);
+      const expanded = expandSelectionWithChordMates(prev, primaryIds);
+      return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
+    });
     digitBufferRef.current = '';
     pendingResizeRef.current = {
       noteId: note.id,
@@ -227,6 +532,47 @@ function StateTestGrid() {
         }
         return;
       }
+      const pendingMarquee = pendingMarqueeRef.current;
+      if (pendingMarquee) {
+        const dx = e.clientX - pendingMarquee.clientX;
+        const dy = e.clientY - pendingMarquee.clientY;
+        if (dx * dx + dy * dy > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+          const gridEl = gridWrapperRef.current;
+          if (gridEl) {
+            const rect = gridEl.getBoundingClientRect();
+            const localX = e.clientX - rect.left;
+            const localY = e.clientY - rect.top;
+            const col = Math.floor(localX / COLUMN_WIDTH);
+            const row = Math.floor(localY / ROW_HEIGHT);
+            const currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
+            const currentCol = Math.max(0, Math.min(TEST_COLS - 1, col));
+            setMarqueeState({
+              startRow: pendingMarquee.startRow,
+              startCol: pendingMarquee.startCol,
+              currentRow,
+              currentCol,
+            });
+          }
+          pendingMarqueeRef.current = null;
+        }
+        return;
+      }
+      if (marqueeState) {
+        const gridEl = gridWrapperRef.current;
+        if (gridEl) {
+          const rect = gridEl.getBoundingClientRect();
+          const localX = e.clientX - rect.left;
+          const localY = e.clientY - rect.top;
+          const col = Math.floor(localX / COLUMN_WIDTH);
+          const row = Math.floor(localY / ROW_HEIGHT);
+          const currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
+          const currentCol = Math.max(0, Math.min(TEST_COLS - 1, col));
+          setMarqueeState((prev) =>
+            prev ? { ...prev, currentRow, currentCol } : null
+          );
+        }
+        return;
+      }
       if (dragState) {
         setDragGhost({ clientX: e.clientX, clientY: e.clientY });
         const gridEl = gridWrapperRef.current;
@@ -243,8 +589,13 @@ function StateTestGrid() {
           const localY = anchorPointClientY - rect.top;
           const col = Math.floor(localX / COLUMN_WIDTH);
           const row = Math.floor(localY / ROW_HEIGHT);
-          const currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
+          let currentRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
           const currentCol = Math.max(0, Math.min(TEST_COLS - 1, col));
+          const note = notesRef.current.find((n) => n.id === dragState.noteId);
+          const isFullHeightChord =
+            note?.chordId &&
+            notesRef.current.filter((n) => n.chordId === note.chordId).length === TEST_ROWS;
+          if (isFullHeightChord) currentRow = dragState.anchorRow;
           setDragState((prev) =>
             prev ? { ...prev, currentRow, currentCol } : null
           );
@@ -315,34 +666,80 @@ function StateTestGrid() {
           const rect = gridEl.getBoundingClientRect();
           const { noteId, edge, anchorStartCol, anchorEndCol } = resizeState;
           const localX = latest ? latest.localX : resizeState.currentClientX - rect.left;
-          setNotes((prev) => {
+          applyMutationRef.current((prev) => {
             const note = prev.find((n) => n.id === noteId);
             if (!note) return prev;
-            return prev.map((n) => {
-              if (n.id !== noteId) return n;
-              if (edge === 'right') {
+            let newStartCol: number;
+            let newEndCol: number;
+            if (edge === 'right') {
                 const visualRightPx = Math.max(
                   (anchorStartCol + 1) * COLUMN_WIDTH,
                   Math.min(localX, TEST_COLS * COLUMN_WIDTH)
                 );
-                const newEndCol = Math.min(
+                newEndCol = Math.min(
                   TEST_COLS - 1,
                   Math.max(anchorStartCol, Math.max(0, Math.round(visualRightPx / COLUMN_WIDTH) - 1))
                 );
-                return { ...n, endCol: newEndCol };
+                newStartCol = note.startCol;
               } else {
                 const noteRightPx = (anchorEndCol + 1) * COLUMN_WIDTH;
                 const visualLeftPx = Math.min(
                   noteRightPx - COLUMN_WIDTH,
                   Math.max(0, localX)
                 );
-                const newStartCol = Math.min(
+                newStartCol = Math.min(
                   anchorEndCol,
                   Math.max(0, Math.min(Math.round(visualLeftPx / COLUMN_WIDTH), TEST_COLS - 1))
                 );
-                return { ...n, startCol: newStartCol };
+                newEndCol = note.endCol;
               }
+            const chordMateIds = note.chordId
+              ? new Set(prev.filter((m) => m.chordId === note.chordId).map((m) => m.id))
+              : new Set([note.id]);
+            const resizeFootprint = new Map<number, [number, number][]>();
+            for (const m of prev) {
+              if (chordMateIds.has(m.id)) {
+                if (!resizeFootprint.has(m.row)) resizeFootprint.set(m.row, []);
+                resizeFootprint.get(m.row)!.push([newStartCol, newEndCol]);
+              }
+            }
+            for (const row of resizeFootprint.keys()) {
+              resizeFootprint.set(row, mergeColumnRanges(resizeFootprint.get(row)!));
+            }
+            const brokenChordIds = new Set<string>();
+            const result = prev.flatMap((n) => {
+              if (chordMateIds.has(n.id)) {
+                return [{ ...n, startCol: newStartCol, endCol: newEndCol }];
+              }
+              if (!resizeFootprint.has(n.row)) return [n];
+              const dropRanges = resizeFootprint.get(n.row)!;
+              let intervals: [number, number][] = [[n.startCol, n.endCol]];
+              for (const hole of dropRanges) {
+                intervals = subtractRangeFromIntervals(intervals, hole);
+              }
+              if (intervals.length === 0) {
+                if (n.chordId) brokenChordIds.add(n.chordId);
+                return [];
+              }
+              // No actual overlap: footprint didn't touch this note, leave it unchanged
+              if (
+                intervals.length === 1 &&
+                intervals[0][0] === n.startCol &&
+                intervals[0][1] === n.endCol
+              )
+                return [n];
+              if (n.chordId) brokenChordIds.add(n.chordId);
+              return intervals.map(([a, b]) => ({
+                ...n,
+                id: genNoteId(),
+                startCol: a,
+                endCol: b,
+                chordId: null,
+              }));
             });
+            return result.map((n) =>
+              n.chordId && brokenChordIds.has(n.chordId) ? { ...n, chordId: null } : n
+            );
           });
         }
         setResizeState(null);
@@ -350,6 +747,35 @@ function StateTestGrid() {
       }
       if (pendingResizeRef.current) {
         pendingResizeRef.current = null;
+      }
+      if (marqueeState) {
+        const { startRow, startCol, currentRow, currentCol } = marqueeState;
+        const minRow = Math.min(startRow, currentRow);
+        const maxRow = Math.max(startRow, currentRow);
+        const minCol = Math.min(startCol, currentCol);
+        const maxCol = Math.max(startCol, currentCol);
+        setNotes((prev) => {
+          const intersectsIds = new Set(
+            prev
+              .filter(
+                (n) =>
+                  n.row >= minRow &&
+                  n.row <= maxRow &&
+                  n.startCol <= maxCol &&
+                  n.endCol >= minCol
+              )
+              .map((n) => n.id)
+          );
+          const expanded = expandSelectionWithChordMatesRef.current(prev, intersectsIds);
+          return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
+        });
+        setMarqueeState(null);
+        setSelectedCell(null);
+        suppressClickAfterMarqueeRef.current = true;
+        return;
+      }
+      if (pendingMarqueeRef.current) {
+        pendingMarqueeRef.current = null;
       }
       if (dragState) {
         setDragGhost(null);
@@ -370,34 +796,87 @@ function StateTestGrid() {
           (currentRow !== anchorRow || currentCol !== anchorCol);
 
         if (isValidDrop) {
+          const deltaRow = currentRow - anchorRow;
           const deltaCol = currentCol - anchorCol;
-          const newStartCol = Math.max(
-            0,
-            Math.min(TEST_COLS - 1, anchorStartCol + deltaCol)
-          );
-          const span = anchorEndCol - anchorStartCol + 1;
-          const newEndCol = Math.max(
-            newStartCol,
-            Math.min(TEST_COLS - 1, newStartCol + span - 1)
-          );
-          setNotes((prev) =>
-            prev.map((n) =>
-              n.id === noteId
-                ? {
+          applyMutationRef.current((prev) => {
+            const dropFootprint = new Map<number, [number, number][]>();
+            for (const n of prev) {
+              if (!n.selected) continue;
+              const newRow = Math.max(0, Math.min(TEST_ROWS - 1, n.row + deltaRow));
+              const newStartCol = Math.max(
+                0,
+                Math.min(TEST_COLS - 1, n.startCol + deltaCol)
+              );
+              const span = n.endCol - n.startCol + 1;
+              const newEndCol = Math.max(
+                newStartCol,
+                Math.min(TEST_COLS - 1, newStartCol + span - 1)
+              );
+              if (!dropFootprint.has(newRow)) dropFootprint.set(newRow, []);
+              dropFootprint.get(newRow)!.push([newStartCol, newEndCol]);
+            }
+            for (const row of dropFootprint.keys()) {
+              dropFootprint.set(row, mergeColumnRanges(dropFootprint.get(row)!));
+            }
+            const brokenChordIds = new Set<string>();
+            const result = prev.flatMap((n) => {
+              if (n.selected) {
+                const newRow = Math.max(0, Math.min(TEST_ROWS - 1, n.row + deltaRow));
+                const newStartCol = Math.max(
+                  0,
+                  Math.min(TEST_COLS - 1, n.startCol + deltaCol)
+                );
+                const span = n.endCol - n.startCol + 1;
+                const newEndCol = Math.max(
+                  newStartCol,
+                  Math.min(TEST_COLS - 1, newStartCol + span - 1)
+                );
+                return [
+                  {
                     ...n,
-                    row: currentRow,
+                    row: newRow,
                     startCol: newStartCol,
                     endCol: newEndCol,
                     selected: false,
-                  }
-                : n
-            )
-          );
+                  },
+                ];
+              }
+              if (!dropFootprint.has(n.row)) return [n];
+              const dropRanges = dropFootprint.get(n.row)!;
+              let intervals: [number, number][] = [[n.startCol, n.endCol]];
+              for (const hole of dropRanges) {
+                intervals = subtractRangeFromIntervals(intervals, hole);
+              }
+              if (intervals.length === 0) {
+                if (n.chordId) brokenChordIds.add(n.chordId);
+                return [];
+              }
+              // No actual overlap: footprint didn't touch this note, leave it unchanged
+              if (
+                intervals.length === 1 &&
+                intervals[0][0] === n.startCol &&
+                intervals[0][1] === n.endCol
+              )
+                return [n];
+              if (n.chordId) brokenChordIds.add(n.chordId);
+              return intervals.map(([a, b]) => ({
+                ...n,
+                id: genNoteId(),
+                startCol: a,
+                endCol: b,
+                chordId: null,
+              }));
+            });
+            return result.map((n) =>
+              n.chordId && brokenChordIds.has(n.chordId) ? { ...n, chordId: null } : n
+            );
+          });
           suppressClickAfterDragRef.current = true;
         } else {
           setNotes((prev) =>
             prev.map((n) => ({ ...n, selected: false }))
           );
+          setSelectedCellRef.current(null);
         }
         setDragState(null);
       } else if (pendingDragRef.current) {
@@ -425,9 +904,9 @@ function StateTestGrid() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, resizeState, TEST_ROWS, TEST_COLS]);
+  }, [dragState, resizeState, marqueeState, TEST_ROWS, TEST_COLS]);
 
-  // When exactly one note is selected: digit keys update value (0–24); Backspace/Delete removes the note
+  // Digit keys: create note at selected empty cell, or update single selected note. Backspace/Delete: clear selected cell or remove selected notes.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -439,15 +918,57 @@ function StateTestGrid() {
         return;
 
       const key = e.key;
+      const sel = selectedCellRef.current;
+
+      if (key === 'Escape') {
+        e.preventDefault();
+        setSelectedCellRef.current(null);
+        applyMutationRef.current((prev) => prev.map((n) => ({ ...n, selected: false })));
+        return;
+      }
+
+      if (key === 'Enter') {
+        e.preventDefault();
+        if (e.repeat) return;
+        const notesNow = notesRef.current;
+        const selectedNotes = notesNow.filter((n) => n.selected);
+        let nextRow: number;
+        let col: number;
+        if (sel) {
+          nextRow = Math.min(sel.row + 1, TEST_ROWS - 1);
+          col = sel.col;
+        } else if (selectedNotes.length === 1) {
+          const n = selectedNotes[0];
+          nextRow = Math.min(n.row + 1, TEST_ROWS - 1);
+          col = n.startCol;
+        } else {
+          return;
+        }
+        const noteAt =
+          notesNow.find((n) => n.row === nextRow && col >= n.startCol && col <= n.endCol) ?? null;
+        if (noteAt) {
+          const expanded = expandSelectionWithChordMatesRef.current(notesNow, new Set([noteAt.id]));
+          applyMutationRef.current((prev) =>
+            prev.map((n) => ({ ...n, selected: expanded.has(n.id) }))
+          );
+          setSelectedCellRef.current(null);
+        } else {
+          setSelectedCellRef.current({ row: nextRow, col });
+          applyMutationRef.current((prev) => prev.map((n) => ({ ...n, selected: false })));
+        }
+        digitBufferRef.current = '';
+        return;
+      }
 
       if (key === 'Backspace' || key === 'Delete') {
         e.preventDefault();
         if (e.repeat) return;
-        setNotes((prev) => {
-          const selected = prev.find((n) => n.selected);
-          if (!selected) return prev;
-          return prev.filter((n) => n.id !== selected.id);
-        });
+        if (sel) {
+          setSelectedCellRef.current(null);
+          digitBufferRef.current = '';
+          return;
+        }
+        applyMutationRef.current((prev) => prev.filter((n) => !n.selected));
         digitBufferRef.current = '';
         return;
       }
@@ -461,7 +982,33 @@ function StateTestGrid() {
         ? Math.min(24, Math.max(0, parsed))
         : 0;
 
-      setNotes((prev) => {
+      if (sel) {
+        const notesNow = notesRef.current;
+        const hasNote = notesNow.some(
+          (n) => n.row === sel.row && sel.col >= n.startCol && sel.col <= n.endCol
+        );
+        if (!hasNote) {
+          applyMutationRef.current((prev) => {
+            const next = prev.map((n) => ({ ...n, selected: false }));
+            next.push({
+              id: genNoteId(),
+              row: sel.row,
+              startCol: sel.col,
+              endCol: sel.col,
+              value,
+              selected: true,
+              chordId: null,
+            });
+            return next;
+          });
+          setSelectedCellRef.current(null);
+          digitBufferRef.current = '';
+          e.preventDefault();
+          return;
+        }
+      }
+
+      applyMutationRef.current((prev) => {
         const selected = prev.filter((n) => n.selected);
         if (selected.length !== 1) return prev;
         return prev.map((n) =>
@@ -491,7 +1038,92 @@ function StateTestGrid() {
   }, [resizeState, dragState]);
 
   return (
-    <div className="inline-block rounded-lg border border-bg-tertiary bg-bg-secondary/80 p-4">
+    <div className="inline-block">
+      <div className="flex flex-wrap items-center gap-1 mb-2">
+        <button
+          type="button"
+          onClick={handleUndo}
+          disabled={undoStack.length === 0}
+          title="Undo"
+          aria-label="Undo"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
+        >
+          <Undo2 className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handleRedo}
+          disabled={redoStack.length === 0}
+          title="Redo"
+          aria-label="Redo"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
+        >
+          <Redo2 className="w-4 h-4" />
+        </button>
+        <span className="w-px h-4 bg-bg-tertiary" aria-hidden />
+        <button
+          type="button"
+          onClick={handleCopy}
+          disabled={!notes.some((n) => n.selected)}
+          title="Copy"
+          aria-label="Copy"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
+        >
+          <Copy className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handleCut}
+          disabled={!notes.some((n) => n.selected)}
+          title="Cut"
+          aria-label="Cut"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
+        >
+          <Scissors className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handlePaste}
+          disabled={!clipboard?.items?.length}
+          title="Paste"
+          aria-label="Paste"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
+        >
+          <ClipboardPaste className="w-4 h-4" />
+        </button>
+        <span className="w-px h-4 bg-bg-tertiary" aria-hidden />
+        <button
+          type="button"
+          onClick={handleSplitIntoNotes}
+          disabled={!notes.some((n) => n.selected && n.startCol < n.endCol)}
+          title="Split into notes"
+          aria-label="Split into notes"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
+        >
+          <SplitSquareVertical className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handleCombineIntoChord}
+          disabled={notes.filter((n) => n.selected).length < 2}
+          title="Combine into chord"
+          aria-label="Combine into chord"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
+        >
+          <Layers className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handleClearAll}
+          disabled={notes.length === 0}
+          title="Clear all"
+          aria-label="Clear all"
+          className="p-2 rounded border border-bg-tertiary/70 text-text-secondary hover:bg-bg-tertiary/80 hover:text-text-primary disabled:opacity-50"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="rounded-lg border border-bg-tertiary bg-bg-secondary/80 p-4">
       <div
         ref={gridWrapperRef}
         className={`relative select-none${dragState ? ' state-test-grid-cursor-grabbing' : ''}${resizeState ? ' state-test-grid-cursor-col-resize' : ''}`}
@@ -524,32 +1156,57 @@ function StateTestGrid() {
           ))
         )}
 
-        {/* Drop target: full area that will be replaced, relative to click (anchor) position */}
+        {/* Drop targets: one per selected note, each moved by same delta as primary */}
         {dragState &&
           dragState.currentRow >= 0 &&
           dragState.currentCol >= 0 &&
           (dragState.currentRow !== dragState.anchorRow ||
-            dragState.currentCol !== dragState.anchorCol) && (
-            (() => {
-              const span = dragState.anchorEndCol - dragState.anchorStartCol + 1;
-              const clickOffsetInNote = dragState.anchorCol - dragState.anchorStartCol;
-              const dropStartCol = dragState.currentCol - clickOffsetInNote;
-              const clampedStart = Math.max(0, Math.min(dropStartCol, TEST_COLS - span));
-              if (span <= 0) return null;
+            dragState.currentCol !== dragState.anchorCol) &&
+          notes
+            .filter((n) => n.selected)
+            .map((note) => {
+              const deltaRow = dragState.currentRow - dragState.anchorRow;
+              const deltaCol = dragState.currentCol - dragState.anchorCol;
+              const newRow = Math.max(0, Math.min(TEST_ROWS - 1, note.row + deltaRow));
+              const newStartCol = Math.max(
+                0,
+                Math.min(TEST_COLS - 1, note.startCol + deltaCol)
+              );
+              const span = note.endCol - note.startCol + 1;
+              const newEndCol = Math.max(
+                newStartCol,
+                Math.min(TEST_COLS - 1, newStartCol + span - 1)
+              );
+              const widthCols = newEndCol - newStartCol + 1;
+              if (widthCols <= 0) return null;
               return (
                 <div
+                  key={note.id}
                   className="absolute border border-pink-100/20 bg-pink-400/20 pointer-events-none"
                   style={{
-                    left: clampedStart * COLUMN_WIDTH,
-                    top: dragState.currentRow * ROW_HEIGHT,
-                    width: span * COLUMN_WIDTH,
+                    left: newStartCol * COLUMN_WIDTH,
+                    top: newRow * ROW_HEIGHT,
+                    width: widthCols * COLUMN_WIDTH,
                     height: ROW_HEIGHT,
                   }}
                   aria-hidden
                 />
               );
-            })()
-          )}
+            })}
+
+        {/* Marquee selection rectangle */}
+        {marqueeState && (
+          <div
+            className="absolute border border-pink-100/20 bg-pink-400/20 pointer-events-none"
+            style={{
+              left: Math.min(marqueeState.startCol, marqueeState.currentCol) * COLUMN_WIDTH,
+              top: Math.min(marqueeState.startRow, marqueeState.currentRow) * ROW_HEIGHT,
+              width: (Math.abs(marqueeState.currentCol - marqueeState.startCol) + 1) * COLUMN_WIDTH,
+              height: (Math.abs(marqueeState.currentRow - marqueeState.startRow) + 1) * ROW_HEIGHT,
+            }}
+            aria-hidden
+          />
+        )}
 
         {/* Interactive cells overlay: empty cells, hover */}
         <div
@@ -567,12 +1224,24 @@ function StateTestGrid() {
                 <div
                   key={`${r}-${c}`}
                   className="relative flex items-center justify-center cursor-pointer"
-                  onClick={() => handleCellClick(r, c)}
+                  onClick={(e) => handleCellClick(r, c, e)}
+                  onMouseDown={(e) => {
+                    if (hasNote || dragState || resizeState || marqueeState) return;
+                    pendingMarqueeRef.current = {
+                      startRow: r,
+                      startCol: c,
+                      clientX: e.clientX,
+                      clientY: e.clientY,
+                    };
+                  }}
                   onMouseEnter={() => handleCellMouseEnter(r, c)}
                   onMouseLeave={() => setHover(null)}
                 >
                   {!hasNote && isHover && !dragState && !resizeState && (
-                    <GridNoteChip value="" slots={1} state="empty" />
+                    <div className="absolute inset-0 bg-pink-400/10 rounded pointer-events-none" />
+                  )}
+                  {!hasNote && selectedCell?.row === r && selectedCell?.col === c && (
+                    <GridNoteChip value="" slots={1} state="emptySelected" />
                   )}
                 </div>
               );
@@ -580,10 +1249,21 @@ function StateTestGrid() {
           )}
         </div>
 
-        {/* Notes layer: spanning chips with resize handles */}
+        {/* All notes as individual chips (including chord notes) */}
         {notes.map((note) => {
           const isDragging = dragState?.noteId === note.id;
-          const isResizing = resizeState?.noteId === note.id;
+          const chordIsBeingDragged =
+            dragState != null &&
+            (note.chordId != null
+              ? notes.some(
+                  (n) => n.id === dragState.noteId && n.chordId === note.chordId
+                )
+              : isDragging);
+          if (chordIsBeingDragged) return null;
+          const resizeNote = resizeState ? notes.find((n) => n.id === resizeState.noteId) : null;
+          const isResizing =
+            resizeState?.noteId === note.id ||
+            (resizeNote?.chordId && note.chordId === resizeNote.chordId && resizeState != null);
           let leftPx: number;
           let widthPx: number;
           if (isResizing && resizeState) {
@@ -597,18 +1277,20 @@ function StateTestGrid() {
             leftPx = note.startCol * COLUMN_WIDTH;
             widthPx = (note.endCol - note.startCol + 1) * COLUMN_WIDTH;
           }
-          const isHoverNote =
-            hover &&
-            note.row === hover.row &&
-            hover.col >= note.startCol &&
-            hover.col <= note.endCol;
+          const hoveredNote =
+            hover != null ? findNoteAt(hover.row, hover.col) : null;
+          const isChordHovered =
+            hoveredNote != null &&
+            (hoveredNote.chordId != null
+              ? note.chordId === hoveredNote.chordId
+              : note.id === hoveredNote.id);
           const chipState = isResizing
             ? 'resizing'
             : note.selected
-            ? isHoverNote && !isDragging
+            ? isChordHovered && !isDragging
               ? 'selectedHover'
               : 'selected'
-            : isHoverNote && !isDragging
+            : isChordHovered && !isDragging
             ? 'hover'
             : 'default';
 
@@ -662,28 +1344,127 @@ function StateTestGrid() {
             </div>
           );
         })}
+        {/* Chord connector dots: centered on grid border between consecutive chord notes */}
+        {(() => {
+          const hoveredNote =
+            hover != null ? findNoteAt(hover.row, hover.col) : null;
+          const byChord = new Map<string, StateTestNote[]>();
+          for (const n of notes) {
+            if (!n.chordId) continue;
+            const key = `${n.chordId}:${n.startCol}:${n.endCol}`;
+            if (!byChord.has(key)) byChord.set(key, []);
+            byChord.get(key)!.push(n);
+          }
+          const draggedNoteId = dragState?.noteId ?? null;
+          const dots: { centerX: number; centerY: number; chordId: string; selected: boolean }[] = [];
+          for (const group of byChord.values()) {
+            if (draggedNoteId != null && group.some((n) => n.id === draggedNoteId)) continue;
+            const sorted = [...group].sort((a, b) => a.row - b.row);
+            const chordSelected = group.some((n) => n.selected);
+            for (let i = 0; i < sorted.length - 1; i++) {
+              if (sorted[i + 1].row !== sorted[i].row + 1) continue;
+              const primary = sorted[i];
+              const resizeNote = resizeState ? notes.find((n) => n.id === resizeState.noteId) : null;
+              const chordIsResizing =
+                resizeNote?.chordId && primary.chordId === resizeNote.chordId && resizeState != null;
+              let leftPx: number;
+              let widthPx: number;
+              if (chordIsResizing && resizeState) {
+                widthPx = resizeState.visualWidthPx;
+                leftPx =
+                  resizeState.edge === 'left'
+                    ? (resizeState.anchorEndCol + 1) * COLUMN_WIDTH - widthPx
+                    : resizeState.anchorStartCol * COLUMN_WIDTH;
+              } else {
+                leftPx = primary.startCol * COLUMN_WIDTH;
+                widthPx = (primary.endCol - primary.startCol + 1) * COLUMN_WIDTH;
+              }
+              const centerX = leftPx + widthPx / 2;
+              const centerY = (primary.row + 1) * ROW_HEIGHT;
+              dots.push({ centerX, centerY, chordId: primary.chordId!, selected: chordSelected });
+            }
+          }
+          const dotWidth = COLUMN_WIDTH * 0.5;
+          const dotHeight = 2;
+          return dots.map((d, i) => {
+            const isChordHovered =
+              hoveredNote?.chordId != null && hoveredNote.chordId === d.chordId;
+            const dotClass = d.selected
+              ? 'bg-cyan-400'
+              : isChordHovered
+                ? 'bg-rose-400'
+                : 'bg-pink-500/50';
+            return (
+              <div
+                key={`chord-dot-${i}`}
+                className={`absolute rounded-full pointer-events-none ${dotClass}`}
+                style={{
+                  left: d.centerX - dotWidth / 2,
+                  top: d.centerY - dotHeight / 2,
+                  width: dotWidth,
+                  height: dotHeight,
+                }}
+              />
+            );
+          });
+        })()}
         {dragGhost && dragState && (() => {
           const note = notes.find((n) => n.id === dragState.noteId);
           if (!note) return null;
+          const chordNotes = note.chordId
+            ? notes
+                .filter((n) => n.chordId === note.chordId)
+                .sort((a, b) => a.row - b.row)
+            : [note];
+          const anchorIndex = chordNotes.findIndex((n) => n.id === dragState.noteId);
           const span = note.endCol - note.startCol + 1;
           const ghostWidthPx = span * COLUMN_WIDTH - 2 * NOTE_CHIP_PADDING_PX;
+          const pad = NOTE_CHIP_PADDING_PX;
+          const ghostDotHeight = 2;
+          const ghostRowWithDot = ROW_HEIGHT + ghostDotHeight;
+          const dotWidth = COLUMN_WIDTH * 0.5;
           return (
             <div
-              className="pointer-events-none fixed z-50"
+              className="pointer-events-none fixed z-50 flex flex-col"
               style={{
                 left: dragGhost.clientX - dragState.anchorOffsetX,
-                top: dragGhost.clientY - dragState.anchorOffsetY,
+                top: dragGhost.clientY - dragState.anchorOffsetY - anchorIndex * ghostRowWithDot,
               }}
             >
-              <GridNoteChip
-                value={note.value}
-                slots={1}
-                widthPx={ghostWidthPx}
-                state="dragGhost"
-              />
+              {chordNotes.map((chordNote, i) => (
+                <Fragment key={chordNote.id}>
+                  {i > 0 && (
+                    <div
+                      className="flex items-center justify-center shrink-0"
+                      style={{ height: ghostDotHeight, width: '100%' }}
+                    >
+                      <div
+                        className="rounded-full bg-cyan-400 shrink-0"
+                        style={{ width: dotWidth, height: ghostDotHeight }}
+                      />
+                    </div>
+                  )}
+                  <div
+                    className="flex items-center justify-center shrink-0"
+                    style={{
+                      padding: `${pad}px`,
+                      height: ROW_HEIGHT,
+                      minHeight: ROW_HEIGHT,
+                    }}
+                  >
+                    <GridNoteChip
+                      value={chordNote.value}
+                      slots={1}
+                      widthPx={ghostWidthPx}
+                      state="dragGhost"
+                    />
+                  </div>
+                </Fragment>
+              ))}
             </div>
           );
         })()}
+      </div>
       </div>
     </div>
   );
@@ -1322,485 +2103,14 @@ export function GridEditor() {
       />
 
       <main className="flex-1 p-4 overflow-auto">
-        <div className="flex flex-col gap-4">
-          <ContextMenu>
-            <ContextMenuTrigger>
-              <div
-                ref={gridRootRef}
-                className="relative rounded border border-bg-tertiary overflow-x-auto"
-                style={{ maxWidth: '100%' }}
-                data-grid-editor="grid"
-              >
-                {/* Header row: string label + bar numbers */}
-                <div className="flex border-b border-bg-tertiary/60 text-sm">
-                  <div className="w-8 shrink-0 p-1 text-left text-text-secondary font-normal">Str</div>
-                  <div
-                    className="flex"
-                    style={{
-                      width: totalColumns * COLUMN_WIDTH,
-                    }}
-                  >
-                    {Array.from({ length: totalColumns }, (_, i) => (
-                      <div
-                        key={i}
-                        className="p-0.5 text-center text-text-secondary font-normal border border-bg-tertiary/40"
-                        style={{ width: COLUMN_WIDTH, minWidth: COLUMN_WIDTH }}
-                      >
-                        {i % subsPerBar === 0 ? Math.floor(i / subsPerBar) + 1 : ''}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Grid body: string labels + CSS grid of cells */}
-                <div className="flex text-sm">
-                  {/* String labels column */}
-                  <div className="flex flex-col">
-                    {Array.from({ length: NUM_STRINGS }, (_, s) => (
-                      <div
-                        key={s}
-                        className="w-8 shrink-0 p-1 text-text-secondary"
-                        style={{ height: ROW_HEIGHT }}
-                      >
-                        {s + 1}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Cells grid */}
-                  <div
-                    className="relative"
-                    style={{
-                      width: totalColumns * COLUMN_WIDTH,
-                    }}
-                  >
-                    {/* Subtle full-row drop highlight while actively dragging notes */}
-                    {dragState?.mode === 'move' &&
-                      (dragState.current.stringIndex !== dragState.anchor.stringIndex ||
-                        dragState.current.slotIndex !== dragState.anchor.slotIndex) &&
-                      Array.from({ length: NUM_STRINGS }, (_, s) => {
-                        const a = dragState.anchor;
-                        const c = dragState.current;
-                        const deltaS = c.stringIndex - a.stringIndex;
-                        let isDropRow = false;
-                        for (const k of selection) {
-                          const [ks] = k.split('-').map(Number);
-                          if (!Number.isFinite(ks)) continue;
-                          if (ks + deltaS === s) {
-                            isDropRow = true;
-                            break;
-                          }
-                        }
-                        if (!isDropRow) return null;
-                        return (
-                          <div
-                            key={`drop-row-${s}`}
-                            className="pointer-events-none absolute left-0 bg-emerald-400/10"
-                            style={{
-                              top: s * ROW_HEIGHT,
-                              height: ROW_HEIGHT,
-                              width: totalColumns * COLUMN_WIDTH,
-                            }}
-                          />
-                        );
-                      })}
-
-                    <div
-                      className="grid"
-                      style={{
-                        gridTemplateColumns: `repeat(${totalColumns}, ${COLUMN_WIDTH}px)`,
-                        gridAutoRows: `${ROW_HEIGHT}px`,
-                      }}
-                    >
-                      {Array.from({ length: NUM_STRINGS }, (_, s) =>
-                        Array.from({ length: totalColumns }, (_, col) => {
-                      const key = cellKey(s, col);
-                      const cell = editorGrid[s]?.[col] ?? null;
-                      const isSelected = selection.has(key);
-                      const hasSelectedLeft = col > 0 && selection.has(cellKey(s, col - 1));
-                      const hasSelectedRight = col < totalColumns - 1 && selection.has(cellKey(s, col + 1));
-                      const hasSelectedTop = s > 0 && selection.has(cellKey(s - 1, col));
-                      const hasSelectedBottom = s < NUM_STRINGS - 1 && selection.has(cellKey(s + 1, col));
-                      // Selection: color-only highlight (no borders/shadows)
-                      const selectionColorClass = isSelected ? 'bg-blue-500 text-primary-foreground' : '';
-                      const isChord = chordCells.has(key);
-                      const isDuration = cell && !cell.isNoteStart;
-                      const isDropTarget =
-                        dragState?.mode === 'move' &&
-                        (() => {
-                          const a = dragState.anchor;
-                          const c = dragState.current;
-                          const deltaS = c.stringIndex - a.stringIndex;
-                          const deltaSlot = c.slotIndex - a.slotIndex;
-                          for (const k of selection) {
-                            const [ks, kslot] = k.split('-').map(Number);
-                            if (ks + deltaS === s && kslot + deltaSlot === col) return true;
-                          }
-                          return false;
-                        })();
-                      // Duration resize preview: derive the resulting span this cell would belong to
-                      let isResizePreview = false;
-                      let isInResizeRun = false;
-                      if (dragState?.mode === 'resize' && dragState.stringIndex === s) {
-                        const noteId = dragState.noteId;
-                        const rowForResize = editorGrid[s] ?? [];
-                        let curStart = -1;
-                        let curEnd = -1;
-                        for (let idx = 0; idx < rowForResize.length; idx += 1) {
-                          const c = rowForResize[idx];
-                          if (c && c.noteId === noteId) {
-                            if (curStart === -1) curStart = idx;
-                            curEnd = idx;
-                          } else if (curEnd !== -1) {
-                            break;
-                          }
-                        }
-                        if (curStart !== -1 && curEnd !== -1) {
-                          if (col >= curStart && col <= curEnd) {
-                            isInResizeRun = true;
-                          }
-                          const anchorSlot = dragState.anchorSlot;
-                          const targetSlot = dragState.currentSlot;
-                          const minSlot = Math.min(anchorSlot, targetSlot);
-                          const maxSlot = Math.max(anchorSlot, targetSlot);
-
-                          let spanStart: number;
-                          let spanEnd: number;
-
-                          if (curStart === curEnd) {
-                            spanStart = minSlot;
-                            spanEnd = maxSlot;
-                          } else if (anchorSlot === curStart && targetSlot >= curStart && targetSlot <= curEnd) {
-                            // Shrink from left while dragging inward, extend when dragging outward.
-                            if (targetSlot >= curStart) {
-                              const newStart = Math.min(targetSlot + 1, curEnd);
-                              spanStart = newStart;
-                              spanEnd = curEnd;
-                            } else {
-                              spanStart = minSlot;
-                              spanEnd = curEnd;
-                            }
-                          } else if (anchorSlot === curEnd && targetSlot >= curStart && targetSlot <= curEnd) {
-                            // Shrink from right while dragging inward, extend when dragging outward.
-                            if (targetSlot <= curEnd) {
-                              const newEnd = Math.max(targetSlot - 1, curStart);
-                              spanStart = curStart;
-                              spanEnd = newEnd;
-                            } else {
-                              spanStart = curStart;
-                              spanEnd = maxSlot;
-                            }
-                          } else {
-                            spanStart = Math.min(curStart, minSlot);
-                            spanEnd = Math.max(curEnd, maxSlot);
-                          }
-
-                          // Preview all cells in the resulting span on this string,
-                          // even if they are currently empty, so both shrinking and
-                          // extending the group are visible while dragging.
-                          isResizePreview = col >= spanStart && col <= spanEnd;
-                        }
-                      }
-                      const isResizeDrag = dragState?.mode === 'resize';
-
-                      // Hover behavior:
-                      // - If hovering over a duration note cell on this string, highlight the full run on this string.
-                      // - Otherwise, only the hovered cell gets hover styling.
-                      let isHoverGroup = false;
-                      let isHoverSingle = false;
-                      if (!dragState && hoverCell && hoverCell.stringIndex === s) {
-                        const hoverCellData = editorGrid[hoverCell.stringIndex]?.[hoverCell.slotIndex] ?? null;
-                        if (hoverCellData && (hoverCellData.isNoteStart || hoverCellData.durationIndex > 0)) {
-                          // Compute the duration run on this string for the hovered note
-                          const row = editorGrid[s] ?? [];
-                          let start = hoverCell.slotIndex;
-                          let end = hoverCell.slotIndex;
-                          while (start - 1 >= 0 && row[start - 1]?.noteId === hoverCellData.noteId) start -= 1;
-                          while (end + 1 < totalColumns && row[end + 1]?.noteId === hoverCellData.noteId) end += 1;
-                          if (col >= start && col <= end) isHoverGroup = true;
-                        } else if (hoverCell.slotIndex === col) {
-                          isHoverSingle = true;
-                        }
-                      }
-
-                      const row = editorGrid[s] ?? [];
-                      const prevCellInRow = row[col - 1];
-                      const nextCellInRow = row[col + 1];
-                      const sameLeft = !!cell && !!prevCellInRow && prevCellInRow.noteId === cell.noteId;
-                      const sameRight = !!cell && !!nextCellInRow && nextCellInRow.noteId === cell.noteId;
-
-                      // Internal padding: 2px. Remove on connecting sides so duration groups stay visually connected.
-                      // IMPORTANT: set individual paddings explicitly so React overwrites previous values
-                      // (otherwise old left/right=0 from a former duration group can linger after split).
-                      const pad = 3;
-                      const cellPadding: React.CSSProperties = {
-                        paddingTop: pad,
-                        paddingBottom: pad,
-                        paddingLeft: pad,
-                        paddingRight: pad,
-                      };
-                      if (cell) {
-                        if (!sameLeft && sameRight) {
-                          // start of run
-                          cellPadding.paddingRight = 0;
-                        } else if (sameLeft && !sameRight) {
-                          // end of run
-                          cellPadding.paddingLeft = 0;
-                        } else if (sameLeft && sameRight) {
-                          // middle of run
-                          cellPadding.paddingLeft = 0;
-                          cellPadding.paddingRight = 0;
-                        }
-                      }
-
-                      const innerRounded =
-                        !cell || (!sameLeft && !sameRight)
-                          ? 'rounded-md'
-                          : !sameLeft && sameRight
-                          ? 'rounded-l-md'
-                          : sameLeft && !sameRight
-                          ? 'rounded-r-md'
-                          : '';
-
-                      const isBeingDragged =
-                        dragState?.mode === 'move' &&
-                        selection.has(key) &&
-                        (dragState.current.stringIndex !== dragState.anchor.stringIndex ||
-                          dragState.current.slotIndex !== dragState.anchor.slotIndex);
-
-                      return (
-                        <div
-                          key={`${s}-${col}`}
-                          className={`relative align-top ${col % 2 === 1 ? 'bg-bg-tertiary/10' : ''} ${
-                            isResizeDrag ? 'cursor-col-resize' : 'cursor-pointer'
-                          }`}
-                          style={{ width: COLUMN_WIDTH, minWidth: COLUMN_WIDTH, ...cellPadding }}
-                          onMouseEnter={() => {
-                            handleMouseEnter(s, col);
-                            setHoverCell({ stringIndex: s, slotIndex: col });
-                          }}
-                          onMouseLeave={() => setHoverCell(null)}
-                          onMouseUp={() => handleMouseUp(s, col)}
-                          onMouseDown={(e) => {
-                            // Let dedicated resize handles own their drags
-                            const target = e.target as HTMLElement;
-                            if (target.closest('[data-role="resize-handle"]')) return;
-                            handleMouseDown(e, s, col, 'cell');
-                          }}
-                          onClick={(e) => handleCellClick(e, s, col)}
-                          onDoubleClick={() => handleCellDoubleClick(s, col)}
-                        >
-                          <div
-                            className={`cell-inner min-h-[28px] w-full h-full relative box-border border-2 border-transparent ${innerRounded} ${
-                              // 1) Active resize preview always wins
-                              isResizePreview
-                                ? 'bg-primary text-primary-foreground cursor-col-resize'
-                                : // 2) Otherwise, persistent selection color wins
-                                selectionColorClass ||
-                                  // 3) Then hover states for non-selected cells
-                                  ((isHoverGroup || isHoverSingle) &&
-                                  (cell
-                                    ? 'bg-[#b83a50] text-primary-foreground border-accent'
-                                    : 'bg-primary/20 border-primary')) ||
-                                  // 4) Then chord styling
-                                  (isChord ? 'bg-emerald-700' : '') ||
-                                  // 5) Finally, base note styling for non-selected, non-hover, non-chord cells
-                                  (cell &&
-                                  !(dragState?.mode === 'resize' && dragState.stringIndex === s && isInResizeRun)
-                                    ? 'bg-primary text-primary-foreground'
-                                    : '')
-                            } ${isBeingDragged ? 'opacity-0' : ''}`}
-                          >
-                            {cell && (
-                              <>
-                                {cell.isNoteStart && (
-                                  <div
-                                    className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10"
-                                    data-role="resize-handle"
-                                    onMouseDown={(ev) => handleMouseDown(ev, s, col, 'resize-left')}
-                                  />
-                                )}
-                                {(() => {
-                                  const nextCell = row[col + 1];
-                                  const isEnd = !nextCell || nextCell.noteId !== cell.noteId;
-                                  return isEnd && (cell.isNoteStart || cell.durationIndex > 0) ? (
-                                    <div
-                                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10"
-                                      data-role="resize-handle"
-                                      onMouseDown={(ev) => handleMouseDown(ev, s, col, 'resize-right')}
-                                    />
-                                  ) : null;
-                                })()}
-                              </>
-                            )}
-                            <div
-                              className="flex items-center justify-center py-0.5 h-full"
-                            >
-                              <input
-                                id={`grid-editor-cell-${s}-${col}`}
-                                type="text"
-                                inputMode="numeric"
-                                className={`w-8 text-center bg-transparent border-none rounded py-0.5 font-mono text-sm focus:outline-none cursor-pointer ${
-                                  cell || isHoverGroup || isHoverSingle ? 'text-primary-foreground' : 'text-accent'
-                                }`}
-                                value={cell ? (cell.isNoteStart ? String(cell.fret) : '') : ''}
-                                onChange={(e) => {
-                                  if (cell && !cell.isNoteStart) return;
-                                  const v = e.target.value.trim();
-                                  const parsed = v === '' ? null : Number(v);
-                                  handleCellEdit(s, col, Number.isFinite(parsed) ? parsed : null);
-                                }}
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    const nextString = s + 1;
-                                    if (nextString < NUM_STRINGS) {
-                                      const nextId = `grid-editor-cell-${nextString}-${col}`;
-                                      const el = document.getElementById(nextId) as HTMLInputElement | null;
-                                      if (el) {
-                                        el.focus();
-                                        el.select?.();
-                                      }
-                                      setSelection(new Set([cellKey(nextString, col)]));
-                                      setAnchor({ stringIndex: nextString, slotIndex: col });
-                                    }
-                                  }
-                                }}
-                                readOnly={cell ? !cell.isNoteStart : false}
-                                tabIndex={cell && !cell.isNoteStart ? -1 : 0}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                      )}
-                    </div>
-                  </div>
-                </div>
-            {(() => {
-              if (!dragGhost || !dragState || dragState.mode !== 'move' || !gridRootRef.current) return null;
-              const rect = gridRootRef.current.getBoundingClientRect();
-              const x = dragGhost.clientX - rect.left;
-              const y = dragGhost.clientY - rect.top;
-
-              let ghostWidth: number;
-              let ghostHeight: number;
-              let anchorOffsetX = 0;
-              let anchorOffsetY = 0;
-
-              if (selection.size > 0) {
-                let minS = Infinity,
-                  maxS = -Infinity,
-                  minSlot = Infinity,
-                  maxSlot = -Infinity;
-                for (const key of selection) {
-                  const [s, slot] = key.split('-').map(Number);
-                  minS = Math.min(minS, s);
-                  maxS = Math.max(maxS, s);
-                  minSlot = Math.min(minSlot, slot);
-                  maxSlot = Math.max(maxSlot, slot);
-                }
-                ghostWidth = (maxSlot - minSlot + 1) * COLUMN_WIDTH;
-                ghostHeight = (maxS - minS + 1) * ROW_HEIGHT;
-
-                const relS = dragState.anchor.stringIndex - minS;
-                const relSlot = dragState.anchor.slotIndex - minSlot;
-                anchorOffsetX = (relSlot + 0.5) * COLUMN_WIDTH;
-                anchorOffsetY = (relS + 0.5) * ROW_HEIGHT;
-              } else {
-                ghostWidth = COLUMN_WIDTH;
-                ghostHeight = ROW_HEIGHT;
-                anchorOffsetX = COLUMN_WIDTH / 2;
-                anchorOffsetY = ROW_HEIGHT / 2;
-              }
-
-              const ghostStyle: React.CSSProperties = {
-                left: x - anchorOffsetX,
-                top: y - anchorOffsetY,
-                width: ghostWidth,
-                height: ghostHeight,
-              };
-              return (
-                <div
-                  className="pointer-events-none absolute z-20 box-border rounded-md bg-blue-500/60 shadow-lg"
-                  style={ghostStyle}
-                />
-              );
-            })()}
-          </div>
-          </ContextMenuTrigger>
-          <ContextMenuContent>
-                <ContextMenuItem onClick={handleDeleteSelection} disabled={selection.size === 0}>
-                  Delete
-                </ContextMenuItem>
-                <ContextMenuItem onClick={handleCombineDuration} disabled={selection.size === 0}>
-                  Combine duration
-                </ContextMenuItem>
-                <ContextMenuItem onClick={handleSplitDuration} disabled={selection.size === 0}>
-                  Split to notes
-                </ContextMenuItem>
-                <ContextMenuItem onClick={handleCombineChord} disabled={selection.size === 0}>
-                  Combine chord
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleDeleteSelection}
-              disabled={selection.size === 0}
-              className="px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-sm"
-            >
-              Delete
-            </button>
-            <button
-              onClick={handleCombineDuration}
-              disabled={selection.size === 0}
-              className="px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-sm"
-            >
-              Combine duration
-            </button>
-            <button
-              onClick={handleSplitDuration}
-              disabled={selection.size === 0}
-              className="px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-sm"
-            >
-              Split to notes
-            </button>
-            <button
-              onClick={handleCombineChord}
-              disabled={selection.size === 0}
-              className="px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-sm"
-            >
-              Combine chord
-            </button>
-            <button
-              onClick={handleClearAll}
-              disabled={!riff?.notes?.length}
-              className="px-3 py-2 rounded border border-bg-tertiary/70 text-sm text-text-secondary hover:bg-bg-tertiary/80 hover:text-text-primary disabled:opacity-50"
-            >
-              Clear all
-            </button>
-          </div>
-        </div>
         <div className="flex flex-col gap-4 p-12">
+         
           <div>
-            <p>ui elements</p>
-            {/* Single-slot default notes */}
-            <GridNoteChip slots={1} state="empty" value="" />
-            <GridNoteChip value={0} slots={1} state="default" />
            
-            <GridNoteChip value={12} slots={1} state="selected" />
-          </div>
-          <div>
-            <p className="mb-2 text-sm text-text-secondary">
-              state test grid (4×10, click empty to add value, click note to toggle selection)
-            </p>
             <StateTestGrid />
+            <p className="mb-2 text-xs text-text-secondary">
+              state test grid (6×12, click empty to add value, click note to toggle selection)
+            </p>
           </div>
         </div>
       </main>

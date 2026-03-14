@@ -14,9 +14,12 @@ type GridNoteChipProps = {
     | 'dragGhost'
     | 'ghost'
     | 'empty'
+    | 'emptySelected'
     | 'active';
   /** Horizontal content alignment */
   align?: 'center' | 'start';
+  /** When true, no rounding/border/background – parent (e.g. chord row) provides the look */
+  chordCell?: boolean;
 };
 
 const SLOT_WIDTH = 60;
@@ -27,21 +30,29 @@ export function GridNoteChip({
   widthPx: widthPxProp,
   state = 'default',
   align = 'center',
+  chordCell = false,
 }: GridNoteChipProps) {
   const widthPx = widthPxProp ?? slots * SLOT_WIDTH;
 
   const alignClasses =
     align === 'center' ? 'justify-center px-1.5' : 'justify-start px-2.5';
 
-  const baseClasses =
-    'rounded-md py-0.5 flex items-center font-mono font-bold text-sm';
+  const baseClasses = chordCell
+    ? 'py-0.5 flex items-center font-mono font-bold text-sm text-white'
+    : 'rounded-md py-0.5 flex items-center font-mono font-bold text-sm';
 
-  // Color/state styles
+  // Color/state styles (chordCell: parent provides bg/border, chip is just content)
   let stateClasses = '';
-  switch (state) {
+  if (chordCell) {
+    stateClasses = 'bg-transparent border-0';
+  } else switch (state) {
     case 'empty':
       stateClasses =
         'hover:bg-pink-400/20 hover:border-pink-100/20 border-1 border-transparent';
+      break;
+    case 'emptySelected':
+      stateClasses =
+        'bg-pink-400/20 border border-pink-100/20';
       break;
     case 'selected':
       stateClasses =
