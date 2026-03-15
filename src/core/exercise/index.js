@@ -4,3 +4,4 @@
 
 export { createExerciseEngine } from './scheduler.js';
 export { riffToTab, getSubdivisionsPerBar, getSubdivisionsPerBeat } from './riffToTab.js';
+export { buildNoteLookup } from './noteLookup.js';

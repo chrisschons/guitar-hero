@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Play, Pause, ArrowLeftToLine, Metronome, RotateCcw } from 'lucide-react';
+import { Play, Pause, ArrowLeftToLine, RotateCcw } from 'lucide-react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Controls } from './components/Controls';
 import { TabDisplay, COLUMN_WIDTH, INITIAL_SCROLL } from './components/TabDisplay';
 import { FretboardDiagram } from './components/FretboardDiagram';
 import { Slider } from './components/ui/Slider';
+import { Footer } from './components/Footer';
 import { useMetronome } from './hooks/useMetronome';
 import { useAnimationLoop } from './hooks/useAnimationLoop';
 import { useNoteTones } from './hooks/useNoteTones';
@@ -26,6 +27,7 @@ function App() {
   const [bpm, setBpm] = useLocalStorage('guitar-hero-bpm', 120);
   const [subdivision, setSubdivision] = useLocalStorage('guitar-hero-subdivision', 2); // Default to eighth notes
   const [metronomeVolume, setMetronomeVolume] = useLocalStorage('guitar-hero-metronome-volume', 0);
+  const [metronomeOn, setMetronomeOn] = useState(true);
   const [rootNote, setRootNote] = useLocalStorage('guitar-hero-root-note', 'A');
   const [typeId, setTypeId] = useLocalStorage('guitar-hero-type', 'pentatonic');
   const [exerciseId, setExerciseId] = useLocalStorage('guitar-hero-exercise', 'pos1');
@@ -120,7 +122,17 @@ function App() {
     if (column) playColumn(column);
   }, [exerciseOnTick, getActiveNoteIndex, getCurrentColumn, playColumn]);
 
-  const { reset: resetMetronome } = useMetronome(bpm, effectiveSubdivision, isPlaying, handleBeat, handleTick, handleCountIn, metronomeVolume, effectiveTimeSignatureId, countInEnabled ? undefined : 0);
+  const { reset: resetMetronome } = useMetronome(
+    bpm,
+    effectiveSubdivision,
+    isPlaying,
+    handleBeat,
+    handleTick,
+    handleCountIn,
+    metronomeOn ? metronomeVolume : 0,
+    effectiveTimeSignatureId,
+    countInEnabled ? undefined : 0
+  );
 
   const handleAnimationFrame = useCallback((deltaTime) => {
     if (activeNoteIndex < 0) return;
@@ -269,6 +281,7 @@ function App() {
           isPlaying={isPlaying}
           onPlayToggle={handlePlayToggle}
           onReset={handleReset}
+          onResetAllToDefaults={handleResetAllToDefaults}
           metronomeVolume={metronomeVolume}
           onMetronomeVolumeChange={setMetronomeVolume}
           tabScrollMode={tabScrollMode}
@@ -284,7 +297,7 @@ function App() {
         />
       </div>
 
-      <div className="flex-1 flex flex-col pb-24">
+      <div className="flex-1 flex flex-col pb-80">
         <TabDisplay
           tab={tab}
           scrollPosition={scrollPosition}
@@ -299,7 +312,8 @@ function App() {
           tuning={tuning}
         />
 
-        <div className="max-w-[1200px] mx-auto px-5 mt-6 flex-1 flex flex-col">
+        <div className="fixed bottom-20 w-full flex-1 flex flex-col z-10 bg-linear-to-t from-bg-primary to-bg-primaryt">
+          <div className="mx-auto x-3">
           {showFretboard && (
             <FretboardDiagram
               vizData={vizData}
@@ -309,97 +323,19 @@ function App() {
               showFretNotes={showFretNotes}
             />
           )}
+          </div>
         </div>
       </div>
 
-      <footer className="fixed bottom-0 left-0 right-0 w-full border-t border-bg-tertiary bg-bg-secondary py-3 z-20">
-        <div className="max-w-[1200px] mx-auto px-5 flex items-center justify-between gap-4 flex-wrap">
-          {/* Controls on the left */}
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex gap-2 items-center">
-              <button
-                onClick={handleReset}
-                className="flex items-center justify-center p-2 rounded-full bg-bg-tertiary text-text-primary cursor-pointer transition-all hover:bg-[#1a4a7a]"
-              >
-                <ArrowLeftToLine size={18} />
-              </button>
-              <button
-                onClick={handlePlayToggle}
-                className="flex items-center gap-2 px-5 py-2 rounded-full bg-accent text-white text-sm font-medium cursor-pointer transition-all hover:bg-accent-light"
-              >
-                {isPlaying ? (
-                  <>
-                    <Pause size={18} />
-                    <span>Pause</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={18} />
-                    <span>Play</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Metronome className="h-5 w-5 text-text-secondary shrink-0" />
-              <Slider
-                value={[bpm]}
-                onValueChange={([value]) => setBpm(value)}
-                min={40}
-                max={220}
-                step={1}
-                className="w-[100px]"
-              />
-              <span className="text-sm font-medium text-text-primary tabular-nums w-8 text-right">
-                {bpm}
-              </span>
-            </div>
-          </div>
-
-          {/* Links on the right */}
-          <div className="flex items-center gap-4 flex-wrap justify-end text-xs">
-            <a
-              href="#/scales"
-              className="text-accent hover:text-accent-light transition-colors"
-            >
-              Scales
-            </a>
-            <a
-              href="#/chords"
-              className="text-accent hover:text-accent-light transition-colors"
-            >
-              Chords
-            </a>
-            <a
-              href="#/editor"
-              className="text-accent hover:text-accent-light transition-colors"
-            >
-              Riff Editor
-            </a>
-            <a
-              href="#/grid-editor"
-              className="text-accent hover:text-accent-light transition-colors"
-            >
-              Grid Editor
-            </a>
-            <a
-              href="#/bravura-demo"
-              className="text-accent hover:text-accent-light transition-colors"
-            >
-              Bravura / SMuFL Demo
-            </a>
-            <button
-              type="button"
-              onClick={handleResetAllToDefaults}
-              className="inline-flex items-center justify-center p-1.5 rounded text-text-secondary hover:text-accent hover:bg-bg-tertiary transition-colors"
-              title="Reset all settings to default"
-              aria-label="Reset all settings to default"
-            >
-              <RotateCcw size={14} />
-            </button>
-          </div>
-        </div>
-      </footer>
+      <Footer
+        bpm={bpm}
+        onBpmChange={(value) => setBpm(value)}
+        metronomeOn={metronomeOn}
+        onMetronomeOnChange={setMetronomeOn}
+        isPlaying={isPlaying}
+        onPlayToggle={handlePlayToggle}
+        onReset={handleReset}
+      />
     </div>
   );
 }

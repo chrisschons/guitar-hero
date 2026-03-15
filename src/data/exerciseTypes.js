@@ -1,28 +1,27 @@
 // String labels (high to low)
 export const STRING_LABELS = ['e', 'B', 'G', 'D', 'A', 'E'];
 
-// Note subdivisions per beat (1–8 for freeform scroller; 12 for subdivision-demo riff)
+// Note subdivisions per beat (limited to 1–4 for exercise page)
 export const SUBDIVISIONS = [
   { id: 1, name: '♩', notesPerBeat: 1 },  // Quarter notes
   { id: 2, name: '♪', notesPerBeat: 2 },  // Eighth notes
   { id: 3, name: '³', notesPerBeat: 3 },  // Triplets
   { id: 4, name: '♬', notesPerBeat: 4 },  // 16th notes
-  { id: 5, name: '5', notesPerBeat: 5 },  // Quintuplets
-  { id: 6, name: '6', notesPerBeat: 6 },  // Sextuplets
-  { id: 7, name: '7', notesPerBeat: 7 },  // Septuplets
-  { id: 8, name: '8', notesPerBeat: 8 },  // 8 per beat
-  { id: 12, name: '12', notesPerBeat: 12 },  // For subdivision-demo (whole/8th/triplet/16th)
 ];
 
 // Time signatures for bar lines (and future count-in)
+// beatsPerMeasure = musical beats per bar (quarter in x/4, dotted-quarter in x/8)
 export const TIME_SIGNATURES = [
   { id: '4/4', name: '4/4', beatsPerMeasure: 4 },
   { id: '3/4', name: '3/4', beatsPerMeasure: 3 },
-  { id: '6/8', name: '6/8', beatsPerMeasure: 3 },   // 3 dotted-quarter beats
-  { id: '12/8', name: '12/8', beatsPerMeasure: 6 }, // 6 dotted-quarter beats
+  { id: '6/8', name: '6/8', beatsPerMeasure: 2 },   // 2 dotted-quarter beats
+  { id: '12/8', name: '12/8', beatsPerMeasure: 4 }, // 4 dotted-quarter beats
 ];
 
-/** Number of metronome dots / beats per bar from time signature (numerator: 4/4→4, 6/8→6) */
+/** Metronome clicks per bar (and "beats" for the metronome scheduler).
+ * 4/4 → 4, 3/4 → 3 (quarter-note clicks), 6/8 → 6, 12/8 → 12 (eighth-note clicks).
+ * Bar duration is the same for 3/4 and 6/8 via beatUnit in the metronome.
+ */
 export function getBeatsPerBarForDots(timeSignatureId) {
   const ts = TIME_SIGNATURES.find((t) => t.id === timeSignatureId);
   if (!ts) return 4;

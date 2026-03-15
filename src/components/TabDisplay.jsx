@@ -86,7 +86,7 @@ export function TabDisplay({
   // (playheadOffset removed: static view always uses wrapped rows and row/col playhead)
 
   return (
-    <div className="relative bg-bg-secondary pt-10 pb-6 pl-14 pr-6 overflow-hidden">
+    <div className="relative pt-10 pb-6 pl-14 pr-6 overflow-hidden">
       {/* Beat indicator */}
       {showBeatIndicator && (
       <div className="absolute top-2 left-0 right-0 flex justify-center items-center h-6 z-20">

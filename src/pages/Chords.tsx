@@ -1,3 +1,5 @@
+import { ArrowLeft } from 'lucide-react';
+import { Footer } from '../components/Footer';
 import { BASIC_CHORDS, BASIC_CHORD_LABELS } from '../data/basicChords';
 import { ChordDiagram } from '../components/ChordDiagram';
 
@@ -6,18 +8,7 @@ const CHORD_TYPES = ['major', 'minor', 'seventh'] as const;
 export function Chords() {
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary">
-      <header className="sticky top-0 z-10 w-full bg-bg-secondary border-b border-bg-tertiary shrink-0">
-        <div className="flex flex-wrap items-center gap-3 p-3">
-          <a
-            href="#/"
-            className="text-accent hover:text-accent-light transition-colors shrink-0"
-          >
-            ← Back
-          </a>
-        </div>
-      </header>
-
-      <div className="flex-1 p-8 max-w-6xl mx-auto w-full">
+      <div className="flex-1 p-8 pb-24 max-w-6xl mx-auto w-full">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-text-primary mb-2">Chords</h1>
           <p className="text-text-secondary">
@@ -49,6 +40,8 @@ export function Chords() {
           );
         })}
       </div>
+
+      <Footer disableMetronome disableTransport />
     </div>
   );
 }

@@ -17,12 +17,14 @@ export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCoun
   onCountInRef.current = onCountIn;
 
   const beatsPerBar = getBeatsPerBarForDots(timeSignatureId);
+  const beatUnit = timeSignatureId.endsWith('/8') ? 0.5 : 1; // eighth-note clicks for x/8, quarter for x/4
 
   useEffect(() => {
     const meta = createMetronome({
       bpm,
       subdivision,
       beatsPerBar,
+      beatUnit,
       volume,
       countInBeats: countInBeats !== undefined ? countInBeats : beatsPerBar,
       onBeat: (beat) => onBeatRef.current?.(beat),
@@ -34,7 +36,7 @@ export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCoun
       meta.stop();
       metronomeRef.current = null;
     };
-  }, [bpm, subdivision, volume, beatsPerBar, countInBeats]);
+  }, [bpm, subdivision, volume, beatsPerBar, beatUnit, countInBeats]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -43,7 +45,7 @@ export function useMetronome(bpm, subdivision, isPlaying, onBeat, onTick, onCoun
     } else {
       metronomeRef.current?.stop();
     }
-  }, [isPlaying, bpm, subdivision, beatsPerBar]);
+  }, [isPlaying, bpm, subdivision, beatsPerBar, beatUnit]);
 
   const reset = useCallback(() => {
     metronomeRef.current?.reset();

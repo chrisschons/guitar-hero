@@ -61,6 +61,41 @@ export function playNote(ctx, stringIndex, fret, tuning, volume = 0.2, openOctav
   osc.stop(now + 0.4);
 }
 
+const RELEASE_SEC = 0.03;
+
+/**
+ * Start a sustained note; returns a handle with stop() to end it (short release).
+ * @param {AudioContext} ctx
+ * @param {number} stringIndex
+ * @param {number} fret
+ * @param {number[]} tuning
+ * @param {number} [volume=0.2]
+ * @param {number[]} [openOctaves]
+ * @returns {{ stop: () => void }}
+ */
+export function playNoteStart(ctx, stringIndex, fret, tuning, volume = 0.2, openOctaves) {
+  const frequency = getNoteFrequency(stringIndex, fret, tuning, openOctaves);
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = 'triangle';
+  osc.frequency.value = frequency;
+  const now = ctx.currentTime;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(volume, now + 0.02);
+  osc.start(now);
+
+  return {
+    stop() {
+      const t = ctx.currentTime;
+      gain.gain.setValueAtTime(gain.gain.value, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + RELEASE_SEC);
+      osc.stop(t + RELEASE_SEC);
+    },
+  };
+}
+
 /**
  * Play all non-null frets in a tab column.
  * @param {AudioContext} ctx
@@ -74,4 +109,51 @@ export function playColumn(ctx, column, tuning, volume = 0.2) {
       playNote(ctx, stringIndex, fret, tuning, volume);
     }
   });
+}
+
+/**
+ * Play column using riff note duration: duration 1 = pluck, duration > 1 = sustain (start at note start, stop when leaving span).
+ * @param {AudioContext} ctx
+ * @param {number} slotIndex - current playback slot
+ * @param {(number|null)[]} column - length 6
+ * @param {({ fret: number, duration: number, startSlot: number } | null)[]} noteInfoPerString - length 6, per-string note info from buildNoteLookup
+ * @param {number[]} tuning
+ * @param {number} [volume=0.2]
+ * @param {Map<number, { stop: () => void, endSlot: number }>} activeNotes - mutated
+ */
+export function playColumnWithDuration(ctx, slotIndex, column, noteInfoPerString, tuning, volume = 0.2, activeNotes) {
+  if (!column || !Array.isArray(column)) return;
+
+  for (let stringIndex = 0; stringIndex < 6; stringIndex++) {
+    const fret = column[stringIndex];
+    const entry = activeNotes.get(stringIndex);
+
+    if (entry && slotIndex > entry.endSlot) {
+      entry.stop();
+      activeNotes.delete(stringIndex);
+    }
+
+    if (fret == null) continue;
+
+    const info = noteInfoPerString[stringIndex];
+    if (!info) {
+      playNote(ctx, stringIndex, fret, tuning, volume);
+      continue;
+    }
+
+    if (info.duration === 1) {
+      playNote(ctx, stringIndex, info.fret, tuning, volume);
+      continue;
+    }
+
+    const endSlot = info.startSlot + info.duration - 1;
+    if (slotIndex === info.startSlot) {
+      if (entry) {
+        entry.stop();
+        activeNotes.delete(stringIndex);
+      }
+      const handle = playNoteStart(ctx, stringIndex, info.fret, tuning, volume);
+      activeNotes.set(stringIndex, { stop: handle.stop, endSlot });
+    }
+  }
 }

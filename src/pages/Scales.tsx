@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { Footer } from '../components/Footer';
 import { PENTATONIC_POSITIONS, BLUES_POSITIONS } from '../data/exerciseTypes';
 import {
   C_MAJOR_3NPS_POSITIONS,
@@ -83,9 +85,6 @@ export function Scales() {
     <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary relative">
       <header className="sticky top-0 z-20 w-full bg-bg-secondary border-b border-bg-tertiary shrink-0">
         <div className="flex flex-wrap items-center gap-3 p-3">
-          <a href="#/" className="text-accent hover:text-accent-light transition-colors shrink-0">
-            ← Back
-          </a>
           <h1 className="text-lg font-semibold text-text-primary">Scales</h1>
           <div className="flex items-center gap-2 text-sm">
             <span className="text-text-secondary">Key</span>
@@ -104,7 +103,7 @@ export function Scales() {
         </div>
       </header>
 
-      <div className="flex-1 p-6  mx-auto w-full">
+      <div className="flex-1 p-6 pb-24 mx-auto w-full">
         <section className="mb-4">
           <button
             type="button"
@@ -300,6 +299,8 @@ export function Scales() {
           </div>
         </section>
       </div>
+
+      <Footer disableMetronome disableTransport />
     </div>
   );
 }

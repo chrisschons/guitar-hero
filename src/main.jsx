@@ -7,7 +7,6 @@ import { BravuraDemo } from './pages/BravuraDemo.jsx'
 import { Chords } from './pages/Chords.tsx'
 import { Tuner } from './pages/Tuner.tsx'
 import { Editor } from './pages/Editor.tsx'
-import { GridEditor } from './pages/GridEditor.tsx'
 import { Scales } from './pages/Scales.tsx'
 
 loadAndApplyTheme()
@@ -41,9 +40,7 @@ function Router() {
     return <Editor />;
   }
 
-  if (route === '#/grid-editor') {
-    return <GridEditor />;
-  }
+
 
   if (route === '#/debug') {
     return <Scales />;

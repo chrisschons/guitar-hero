@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Footer } from '../components/Footer';
 
 const SMUFL_CATEGORIES = {
   noteheads: {
@@ -344,10 +345,11 @@ export function BravuraDemo() {
   const [activeCategory, setActiveCategory] = useState('noteheads');
 
   return (
-    <div className="min-h-screen p-8 max-w-6xl mx-auto">
+    <div className="min-h-screen flex flex-col">
+      <div className="flex-1 p-8 max-w-6xl mx-auto w-full">
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-text-primary mb-2">
-          Bravura / SMuFL Demo
+          Bravura
         </h1>
         <p className="text-text-secondary">
           SMuFL (Standard Music Font Layout) is a specification for music symbols.
@@ -421,7 +423,7 @@ export function BravuraDemo() {
         </div>
       </section>
 
-      <section className="mt-12 p-6 bg-bg-secondary rounded-lg">
+      <section className="mt-12 p-6 bg-bg-secondary rounded-lg mb-20">
         <h2 className="text-xl font-semibold mb-4">Resources</h2>
         <ul className="space-y-2 text-text-secondary">
           <li>
@@ -459,6 +461,9 @@ export function BravuraDemo() {
           </li>
         </ul>
       </section>
+      </div>
+
+      <Footer disableMetronome disableTransport />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Tally3, Guitar, Palette } from 'lucide-react';
+import { Tally3, Guitar, Palette, RotateCcw } from 'lucide-react';
 import { EXERCISE_TYPES, SUBDIVISIONS, TIME_SIGNATURES } from '../data/exerciseTypes';
 import { TUNINGS_LIST } from '../data/tunings';
 import { getStringLabels, NOTE_NAMES } from '../core/music';
@@ -32,6 +32,7 @@ export function Controls({
   isPlaying,
   onPlayToggle,
   onReset,
+  onResetAllToDefaults,
   metronomeVolume,
   onMetronomeVolumeChange,
   tabScrollMode,
@@ -151,11 +152,14 @@ export function Controls({
         </Select>
       )}
 
-      <div className="hidden flex items-center gap-2">
+      <div className="hidden md:flex items-center gap-2">
         <span className="text-xs text-text-secondary">Click</span>
         <Slider
-          value={[metronomeVolume]}
-          onValueChange={([value]) => onMetronomeVolumeChange(value)}
+          defaultValue={[metronomeVolume]}
+          onValueChange={(values) => {
+            const value = Array.isArray(values) ? values[0] : metronomeVolume;
+            onMetronomeVolumeChange(value);
+          }}
           min={0}
           max={1}
           step={0.05}
@@ -164,14 +168,16 @@ export function Controls({
       </div>
       </div>
 
-      {/* Right: Scroll, Fretboard, Count-in, Theme */}
+      {/* Right: Reset all, Scroll, Fretboard, Count-in, Theme */}
       <div className="flex flex-wrap gap-3 items-center">
       <div className="flex items-center gap-2">
-      
+       
+      {/*}
         <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
           <Switch checked={tabScrollMode} onCheckedChange={onTabScrollModeChange} />
           <span>Scroll</span>
         </label>
+        */}
         <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
           <Switch checked={showFretboard} onCheckedChange={onShowFretboardChange} />
           <span>Fretboard</span>
@@ -183,8 +189,17 @@ export function Controls({
         </label>
         <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
           <Switch checked={showFretNotes} onCheckedChange={onShowFretNotesChange} />
-          <span>Note labels</span>
+          <span>Notes</span>
         </label>
+        <button
+          type="button"
+          onClick={onResetAllToDefaults}
+          className="inline-flex items-center gap-1.5 rounded-full border border-bg-tertiary px-3 py-1 text-xs text-text-secondary hover:bg-bg-tertiary transition-colors"
+        >
+          <RotateCcw size={12} />
+         
+        </button>
+
       </div>
 {/*}
       <Select value={themeId} onValueChange={onThemeChange}>

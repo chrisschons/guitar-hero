@@ -43,6 +43,8 @@ type EditorHeaderProps = {
   onInsertChordPreset?: () => void;
   showTabScroller: boolean;
   onShowTabScrollerChange: (value: boolean) => void;
+  /** When false, hide the "← Back" link (e.g. when page uses fixed footer nav). Default true. */
+  showBackButton?: boolean;
 };
 
 export function EditorHeader({
@@ -68,6 +70,7 @@ export function EditorHeader({
   onInsertChordPreset,
   showTabScroller,
   onShowTabScrollerChange,
+  showBackButton = true,
 }: EditorHeaderProps) {
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [newRiffName, setNewRiffName] = useState('');
@@ -81,9 +84,11 @@ export function EditorHeader({
 
   return (
     <header className="sticky top-0 z-10 bg-bg-secondary border-b border-bg-tertiary p-3 flex flex-wrap items-center gap-3">
-      <a href="#/" className="text-accent hover:underline shrink-0">
-        ← Back
-      </a>
+      {showBackButton && (
+        <a href="#/" className="text-accent hover:underline shrink-0">
+          ← Back
+        </a>
+      )}
       <Select value={riffId} onValueChange={onRiffIdChange}>
         <SelectTrigger className="min-w-[200px]">
           <SelectValue placeholder="Select riff" />
@@ -123,6 +128,7 @@ export function EditorHeader({
           })}
         </SelectContent>
       </Select>
+      {/*}
       <Dialog
         open={isNewDialogOpen}
         onOpenChange={(open) => {
@@ -130,6 +136,7 @@ export function EditorHeader({
           if (open) setNewRiffName('');
         }}
       >
+        
         <DialogTrigger
           render={
             <Button
@@ -175,12 +182,15 @@ export function EditorHeader({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      */}
+      {/*}
       <span
         className="text-xs text-text-secondary shrink-0"
         title={isUnsaved ? 'Unsaved changes' : 'Saved'}
       >
         {isUnsaved ? 'Unsaved' : 'Saved'}
       </span>
+      */}
       <div className="flex items-center gap-2 text-sm">
         <span className="text-text-secondary">Time</span>
         <Select
@@ -223,8 +233,7 @@ export function EditorHeader({
           </SelectContent>
         </Select>
       </div>
-     
-     {/*}
+      {/*}
       <button
         onClick={onCopyAsJson}
         className="flex items-center gap-2 px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 text-sm"
@@ -275,6 +284,7 @@ export function EditorHeader({
           Chord+
         </button>
       )}
+      {/*}
       {onUndo && onRedo && (
         <div className="flex gap-1">
           <button
@@ -295,7 +305,9 @@ export function EditorHeader({
           </button>
         </div>
       )}
+      */}
       <div className="flex gap-2 items-center">
+        {/*}
         <div className="flex items-center gap-1 text-xs text-text-secondary">
           <span>Tab Scroller</span>
           <Switch
@@ -303,13 +315,7 @@ export function EditorHeader({
             onCheckedChange={(v) => onShowTabScrollerChange(Boolean(v))}
           />
         </div>
-        <button
-          onClick={onReset}
-          className="p-2 rounded-full bg-bg-tertiary hover:bg-bg-tertiary/80"
-          title="Reset"
-        >
-          <ArrowLeftToLine size={18} />
-        </button>
+        */}
         {onMetronomeVolumeChange != null && (
           <div className="flex items-center gap-2">
             <Metronome size={18} className="text-text-secondary shrink-0" />
@@ -326,20 +332,7 @@ export function EditorHeader({
             />
           </div>
         )}
-        <button
-          onClick={onPlayToggle}
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-accent text-white text-sm font-medium"
-        >
-          {isPlaying ? (
-            <>
-              <Pause size={18} /> Pause
-            </>
-          ) : (
-            <>
-              <Play size={18} /> Play
-            </>
-          )}
-        </button>
+      
       </div>
     </header>
   );

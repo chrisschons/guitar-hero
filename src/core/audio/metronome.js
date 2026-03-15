@@ -34,9 +34,10 @@ function playClickAt(ctx, frequency, gainValue, when) {
  * schedule() should be called periodically (e.g. every 25ms) while running.
  *
  * @param {object} options
- * @param {number} options.bpm
- * @param {number} options.subdivision - notes per beat (1–8)
- * @param {number} [options.beatsPerBar=4] - beats per bar (from time signature, e.g. 4 for 4/4, 6 for 6/8)
+ * @param {number} options.bpm - quarter notes per minute
+ * @param {number} options.subdivision - subdivisions per beat (e.g. 4 for 16ths in 3/4, 6 for 8ths in 6/8)
+ * @param {number} [options.beatsPerBar=4] - musical beats per bar (3 for 3/4, 2 for 6/8)
+ * @param {number} [options.beatUnit=1] - beat duration in quarter notes (1 = quarter, 1.5 = dotted quarter for 6/8)
  * @param {number} [options.countInBeats] - count-in beats before first tick; 0 = no count-in (default: beatsPerBar)
  * @param {number} [options.volume=0.3] - click volume 0–1
  * @param { (beat: number) => void } [options.onBeat]
@@ -46,6 +47,7 @@ function playClickAt(ctx, frequency, gainValue, when) {
 export function createMetronome(options) {
   const { bpm, subdivision, volume = 0.3, onBeat, onTick, onCountIn } = options;
   const beatsPerBar = Math.max(1, Number(options.beatsPerBar) || 4);
+  const beatUnit = Number(options.beatUnit) || 1; // 1 = quarter, 1.5 = dotted quarter (6/8)
   const countInBeats = Number(options.countInBeats) ?? beatsPerBar;
   const maxGain = 0.5;
   const effectiveVolume = Math.min(1, volume) * maxGain;
@@ -56,7 +58,7 @@ export function createMetronome(options) {
   let countIn = countInBeats > 0 ? 0 : beatsPerBar; // skip count-in when 0
   let timerId = null;
 
-  const secondsPerBeat = 60.0 / bpm;
+  const secondsPerBeat = (60.0 / bpm) * beatUnit;
   const secondsPerNote = secondsPerBeat / subdivision;
 
   function schedule() {
@@ -93,7 +95,8 @@ export function createMetronome(options) {
           const subWhen = nextNoteTime + sub * secondsPerNote;
           const subDelayMs = (subWhen - now) * 1000;
           const tickForCallback = currentTick + sub;
-          if (subDelayMs >= 0) setTimeout(() => onTick?.(tickForCallback), subDelayMs);
+          // Fire onTick even when behind (use 0 delay so note playback still runs)
+          setTimeout(() => onTick?.(tickForCallback), Math.max(0, subDelayMs));
         }
 
         nextNoteTime += secondsPerBeat;
