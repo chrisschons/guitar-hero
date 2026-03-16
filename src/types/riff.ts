@@ -22,6 +22,33 @@ export type Subdivision =
 
 export type TuningId = string;
 
+/**
+ * Rhythm group: a span of slots with a rhythm interpretation (normal or tuplet).
+ * Tuplets compress N notes into M subdivisions; grid slot count is unchanged.
+ */
+export type RhythmGroup = {
+  id: string;
+  startSlot: number;
+  endSlot: number;
+  type: 'normal' | 'tuplet';
+  /** For tuplets: notesInGroup / slotsOccupied, e.g. { n: 3, d: 4 } for triplet in 4 slots. */
+  tupletRatio?: { n: number; d: number };
+  /** Strings this group applies to (empty = all / inferred from notes). */
+  strings?: number[];
+};
+
+/**
+ * Rest event: first-class rest within a slot span, optionally inside a rhythm group.
+ */
+export type RestEvent = {
+  id?: string;
+  bar: number;
+  subdivision: number;
+  durationSubdivisions?: number;
+  rhythmGroupId?: string;
+  indexInGroup?: number;
+};
+
 export type NoteEvent = {
   /**
    * Optional stable id for editor (e.g. selection, resize by note).
@@ -48,6 +75,13 @@ export type NoteEvent = {
    * later when we implement it.
    */
   durationSubdivisions?: number;
+
+  /**
+   * If set, this note belongs to a RhythmGroup; onset/duration may be derived from group + indexInGroup.
+   */
+  rhythmGroupId?: string;
+  /** Index within the group (0-based). Used for tuplet timing and display order. */
+  indexInGroup?: number;
 
   /**
    * Non-MVP fields reserved for future use.
@@ -96,6 +130,16 @@ export type Riff = {
    */
   notes: NoteEvent[];
   chords?: ChordEvent[];
+
+  /**
+   * Rhythm groups (normal duration spans or tuplets) that notes can reference via rhythmGroupId.
+   */
+  rhythmGroups?: RhythmGroup[];
+
+  /**
+   * Explicit rest events (optional). If not used, rest = absence of note in a slot.
+   */
+  rests?: RestEvent[];
 
   metadata?: RiffMetadata;
 

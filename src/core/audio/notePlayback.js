@@ -44,8 +44,9 @@ export function getNoteFrequency(stringIndex, fret, tuning, openOctaves = STANDA
  * @param {number[]} tuning
  * @param {number} [volume=0.2]
  * @param {number[]} [openOctaves]
+ * @param {number} [delaySec=0] - schedule note at ctx.currentTime + delaySec (for tuplet timing)
  */
-export function playNote(ctx, stringIndex, fret, tuning, volume = 0.2, openOctaves) {
+export function playNote(ctx, stringIndex, fret, tuning, volume = 0.2, openOctaves, delaySec = 0) {
   const frequency = getNoteFrequency(stringIndex, fret, tuning, openOctaves);
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -53,7 +54,7 @@ export function playNote(ctx, stringIndex, fret, tuning, volume = 0.2, openOctav
   gain.connect(ctx.destination);
   osc.type = 'triangle';
   osc.frequency.value = frequency;
-  const now = ctx.currentTime;
+  const now = ctx.currentTime + delaySec;
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(volume, now + 0.02);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
@@ -113,47 +114,54 @@ export function playColumn(ctx, column, tuning, volume = 0.2) {
 
 /**
  * Play column using riff note duration: duration 1 = pluck, duration > 1 = sustain (start at note start, stop when leaving span).
+ * For tuplet notes, onsetSlot is fractional; use slotDurationSec to schedule the pluck at the correct time within the slot.
  * @param {AudioContext} ctx
  * @param {number} slotIndex - current playback slot
  * @param {(number|null)[]} column - length 6
- * @param {({ fret: number, duration: number, startSlot: number } | null)[]} noteInfoPerString - length 6, per-string note info from buildNoteLookup
+ * @param {({ fret: number, duration: number, startSlot: number, onsetSlot?: number } | null)[]} noteInfoPerString - length 6
  * @param {number[]} tuning
  * @param {number} [volume=0.2]
  * @param {Map<number, { stop: () => void, endSlot: number }>} activeNotes - mutated
+ * @param {number} [slotDurationSec] - seconds per slot; when set, notes with onsetSlot are scheduled at (onsetSlot - slotIndex) * slotDurationSec
  */
-export function playColumnWithDuration(ctx, slotIndex, column, noteInfoPerString, tuning, volume = 0.2, activeNotes) {
+export function playColumnWithDuration(ctx, slotIndex, column, noteInfoPerString, tuning, volume = 0.2, activeNotes, slotDurationSec) {
   if (!column || !Array.isArray(column)) return;
 
   for (let stringIndex = 0; stringIndex < 6; stringIndex++) {
     const fret = column[stringIndex];
     const entry = activeNotes.get(stringIndex);
+    const infos = noteInfoPerString[stringIndex];
+    const list = Array.isArray(infos) ? infos : infos ? [infos] : [];
 
     if (entry && slotIndex > entry.endSlot) {
       entry.stop();
       activeNotes.delete(stringIndex);
     }
 
-    if (fret == null) continue;
-
-    const info = noteInfoPerString[stringIndex];
-    if (!info) {
-      playNote(ctx, stringIndex, fret, tuning, volume);
+    if (list.length === 0) {
+      if (fret != null) playNote(ctx, stringIndex, fret, tuning, volume);
       continue;
     }
 
-    if (info.duration === 1) {
-      playNote(ctx, stringIndex, info.fret, tuning, volume);
-      continue;
-    }
-
-    const endSlot = info.startSlot + info.duration - 1;
-    if (slotIndex === info.startSlot) {
-      if (entry) {
-        entry.stop();
-        activeNotes.delete(stringIndex);
+    for (const info of list) {
+      if (info.duration === 1) {
+        const delaySec =
+          slotDurationSec != null && info.onsetSlot != null
+            ? Math.max(0, (info.onsetSlot - slotIndex) * slotDurationSec)
+            : 0;
+        playNote(ctx, stringIndex, info.fret, tuning, volume, undefined, delaySec);
+        continue;
       }
-      const handle = playNoteStart(ctx, stringIndex, info.fret, tuning, volume);
-      activeNotes.set(stringIndex, { stop: handle.stop, endSlot });
+
+      const endSlot = info.startSlot + info.duration - 1;
+      if (slotIndex === info.startSlot) {
+        if (entry) {
+          entry.stop();
+          activeNotes.delete(stringIndex);
+        }
+        const handle = playNoteStart(ctx, stringIndex, info.fret, tuning, volume);
+        activeNotes.set(stringIndex, { stop: handle.stop, endSlot });
+      }
     }
   }
 }

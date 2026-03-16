@@ -52,6 +52,9 @@ export function riffToTab(riff) {
   /** @type {(number | null)[][]} */
   const tab = Array.from({ length: numColumns }, () => [null, null, null, null, null, null]);
 
+  const rhythmGroups = riff.rhythmGroups ?? [];
+  const groupById = new Map(rhythmGroups.map((g) => [g.id, g]));
+
   for (const n of notes) {
     const bar = n.bar >= 1 ? n.bar : 1;
     const sub = n.subdivision >= 1 ? n.subdivision : 1;
@@ -59,9 +62,23 @@ export function riffToTab(riff) {
     const duration = n.durationSubdivisions && n.durationSubdivisions > 0 ? n.durationSubdivisions : 1;
     const startSlot = (bar - 1) * subdivisionsPerBar + (sub - 1);
     const endSlot = Math.min(numColumns - 1, startSlot + duration - 1);
-    for (let slot = startSlot; slot <= endSlot; slot += 1) {
-      if (slot >= 0 && slot < numColumns) {
-        tab[slot][stringIndex] = n.fret;
+
+    const group = n.rhythmGroupId ? groupById.get(n.rhythmGroupId) : null;
+    const indexInGroup = n.indexInGroup ?? 0;
+
+    if (group?.type === 'tuplet' && group.tupletRatio) {
+      const spanSlots = group.endSlot - group.startSlot + 1;
+      const nNotes = group.tupletRatio.n;
+      const onsetSlot = group.startSlot + (indexInGroup / nNotes) * spanSlots;
+      const triggerSlot = Math.floor(onsetSlot);
+      if (triggerSlot >= 0 && triggerSlot < numColumns) {
+        tab[triggerSlot][stringIndex] = n.fret;
+      }
+    } else {
+      for (let slot = startSlot; slot <= endSlot; slot += 1) {
+        if (slot >= 0 && slot < numColumns) {
+          tab[slot][stringIndex] = n.fret;
+        }
       }
     }
   }

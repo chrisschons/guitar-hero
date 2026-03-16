@@ -1,4 +1,4 @@
-import type { Riff, NoteEvent } from '../types/riff';
+import type { Riff, NoteEvent, RhythmGroup } from '../types/riff';
 import { getSubdivisionsPerBar } from './exercise';
 import { noteSlotRange } from './riffGrid';
 import { applyCellUpdateToNotes as applyCellUpdateFromRiffGrid } from './riffGrid';
@@ -71,7 +71,38 @@ export type GridNoteForRiff = {
   endCol: number;
   value: number;
   id?: string;
+  rhythmGroupId?: string;
+  indexInGroup?: number;
 };
+
+/**
+ * Convert riff notes (and optional rhythmGroups) to GridNoteForRiff[] for grid display.
+ * Use when syncing riff → grid (e.g. on load).
+ */
+export function riffNotesToGridNotes(
+  notes: NoteEvent[],
+  bars: number,
+  subsPerBar: number
+): GridNoteForRiff[] {
+  const totalSlots = bars * subsPerBar;
+  const gridNotes: GridNoteForRiff[] = [];
+  for (let i = 0; i < notes.length; i += 1) {
+    const n = notes[i];
+    const { startSlot, endSlot } = noteSlotRange(n, subsPerBar);
+    if (startSlot >= totalSlots) continue;
+    const endClamped = Math.min(totalSlots - 1, endSlot);
+    gridNotes.push({
+      row: n.string - 1,
+      startCol: startSlot,
+      endCol: endClamped,
+      value: n.fret,
+      id: n.id,
+      rhythmGroupId: n.rhythmGroupId,
+      indexInGroup: n.indexInGroup,
+    });
+  }
+  return gridNotes;
+}
 
 /**
  * Convert grid notes (editor source of truth) to NoteEvent[] for playback/save.
@@ -98,6 +129,8 @@ export function gridNotesToRiffNotes(
     };
     if (g.id != null && g.id !== '') note.id = g.id;
     if (durationSubdivisions > 1) note.durationSubdivisions = durationSubdivisions;
+    if (g.rhythmGroupId != null) note.rhythmGroupId = g.rhythmGroupId;
+    if (g.indexInGroup != null) note.indexInGroup = g.indexInGroup;
     notes.push(note);
   }
   return notes;
@@ -511,14 +544,21 @@ export function moveNotes(
   return { notes: sortNotesByStringSlot(newNotes, subsPerBar), movedCellKeys };
 }
 
-// --- Combine duration: one string, contiguous range -> one note ---
+function generateRhythmGroupId(): string {
+  return `rg-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/**
+ * Combine contiguous selected cells on each string into one note and create a normal RhythmGroup.
+ * Returns updated notes and the new group (caller merges into riff.rhythmGroups).
+ */
 export function combineDurationInSelection(
   riff: Riff,
   notes: NoteEvent[],
   cellKeys: Set<string>
-): NoteEvent[] {
+): { notes: NoteEvent[]; addedGroup: RhythmGroup | null } {
   const subsPerBar = getSubsPerBar(riff);
-  if (cellKeys.size === 0) return notes;
+  if (cellKeys.size === 0) return { notes, addedGroup: null };
 
   const byString = new Map<number, number[]>();
   for (const key of cellKeys) {
@@ -531,6 +571,8 @@ export function combineDurationInSelection(
   }
 
   let result = notes;
+  let addedGroup: RhythmGroup | null = null;
+
   for (const [stringIndex, slots] of byString) {
     if (slots.length === 0) continue;
     const minSlot = Math.min(...slots);
@@ -578,6 +620,15 @@ export function combineDurationInSelection(
       }
     }
 
+    const groupId = generateRhythmGroupId();
+    addedGroup = {
+      id: groupId,
+      startSlot: minSlot,
+      endSlot: maxSlot,
+      type: 'normal',
+      strings: [str],
+    };
+
     const bar = Math.floor(minSlot / subsPerBar) + 1;
     const subdivision = (minSlot % subsPerBar) + 1;
     withoutOverlap.push({
@@ -586,11 +637,108 @@ export function combineDurationInSelection(
       bar,
       subdivision,
       durationSubdivisions: spanLength,
+      rhythmGroupId: groupId,
+      indexInGroup: 0,
     });
     result = sortNotesByStringSlot(withoutOverlap, subsPerBar);
   }
 
-  return result;
+  return { notes: result, addedGroup };
+}
+
+function generateNoteId(): string {
+  return `n-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/**
+ * Convert the selected span into a tuplet group: remove any notes overlapping the span
+ * and create n new notes (e.g. 3 or 6) evenly distributed in the span. Overrides whatever
+ * was there (single note or long group → 4-cell tuplet).
+ * Ratio e.g. { n: 3, d: 4 } = 3 notes in 4 slots (triplet). Returns updated notes and the new group.
+ */
+export function makeTupletInSelection(
+  riff: Riff,
+  notes: NoteEvent[],
+  cellKeys: Set<string>,
+  tupletRatio: { n: number; d: number }
+): { notes: NoteEvent[]; addedGroup: RhythmGroup | null } {
+  const subsPerBar = getSubsPerBar(riff);
+  if (cellKeys.size === 0) return { notes, addedGroup: null };
+
+  let minSlot = Infinity;
+  let maxSlot = -Infinity;
+  const stringsInSelection = new Set<number>();
+  for (const key of cellKeys) {
+    const [sStr, slotStr] = key.split('-');
+    const s = Number(sStr);
+    const slot = Number(slotStr);
+    if (!Number.isFinite(s) || !Number.isFinite(slot)) continue;
+    stringsInSelection.add(s);
+    minSlot = Math.min(minSlot, slot);
+    maxSlot = Math.max(maxSlot, slot);
+  }
+  if (minSlot > maxSlot) return { notes, addedGroup: null };
+  const spanSlots = maxSlot - minSlot + 1;
+  if (spanSlots < 2) return { notes, addedGroup: null };
+
+  const n = Math.max(1, tupletRatio.n);
+
+  // Find overlapping notes to get fret per string and to remove them
+  const overlappingByString = new Map<number, { fret: number }>();
+  for (const note of notes) {
+    const s = note.string - 1;
+    if (!stringsInSelection.has(s)) continue;
+    const { startSlot, endSlot } = getSlotRange(note, subsPerBar);
+    if (endSlot < minSlot || startSlot > maxSlot) continue;
+    if (!overlappingByString.has(s)) {
+      overlappingByString.set(s, { fret: note.fret });
+    }
+  }
+
+  // Remove all notes that overlap the span on any selected string
+  const kept = notes.filter((note) => {
+    const s = note.string - 1;
+    if (!stringsInSelection.has(s)) return true;
+    const { startSlot, endSlot } = getSlotRange(note, subsPerBar);
+    if (endSlot < minSlot || startSlot > maxSlot) return true;
+    return false;
+  });
+
+  const groupId = generateRhythmGroupId();
+  const addedGroup: RhythmGroup = {
+    id: groupId,
+    startSlot: minSlot,
+    endSlot: maxSlot,
+    type: 'tuplet',
+    tupletRatio,
+    strings: Array.from(stringsInSelection).map((s) => s + 1),
+  };
+
+  const newNotes: NoteEvent[] = [];
+  let indexInGroup = 0;
+  for (const s of Array.from(stringsInSelection).sort((a, b) => a - b)) {
+    const fret = overlappingByString.get(s)?.fret ?? 0;
+    for (let i = 0; i < n; i++) {
+      const onsetSlot = minSlot + Math.floor((i * spanSlots) / n);
+      const nextOnset = i < n - 1 ? minSlot + Math.floor(((i + 1) * spanSlots) / n) : maxSlot + 1;
+      const durationSubdivisions = Math.max(1, nextOnset - onsetSlot);
+      const bar = Math.floor(onsetSlot / subsPerBar) + 1;
+      const subdivision = (onsetSlot % subsPerBar) + 1;
+      newNotes.push({
+        id: generateNoteId(),
+        string: s + 1,
+        fret,
+        bar,
+        subdivision,
+        durationSubdivisions,
+        rhythmGroupId: groupId,
+        indexInGroup: indexInGroup++,
+      });
+    }
+  }
+
+  const result = sortNotesByStringSlot([...kept, ...newNotes], subsPerBar);
+  return { notes: result, addedGroup };
 }
 
 // --- Split duration to notes ---

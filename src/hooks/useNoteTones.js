@@ -31,7 +31,7 @@ export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING) 
   );
 
   const playColumnWithDuration = useCallback(
-    (slotIndex, column, noteInfoPerString) => {
+    (slotIndex, column, noteInfoPerString, slotDurationSec) => {
       if (volume === 0 || !column || !Array.isArray(column)) return;
       const ctx = getAudioContext();
       const run = () =>
@@ -42,7 +42,8 @@ export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING) 
           noteInfoPerString,
           tuning,
           volume * 0.2,
-          activeSustainedRef.current
+          activeSustainedRef.current,
+          slotDurationSec
         );
       if (ctx.state === 'suspended') {
         resumeAudioContext().then(run);

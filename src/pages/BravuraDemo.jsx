@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Footer } from '../components/Footer';
+import { Music, Music2,Music3,Music4} from 'lucide-react';
 
 const SMUFL_CATEGORIES = {
   noteheads: {

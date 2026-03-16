@@ -18,20 +18,23 @@ import { resumeAudioContext } from '../core/audio';
 import { STANDARD_TUNING } from '../data/tunings';
 import { getStringLabels } from '../core/music';
 import { getBeatsPerBarForDots } from '../data/exerciseTypes';
-import type { Riff } from '../types/riff';
+import type { Riff, RhythmGroup } from '../types/riff';
 import {
   notesToEditorGrid,
   cellKey,
   getSubsPerBar,
   gridNotesToRiffNotes,
+  riffNotesToGridNotes,
   applyCellUpdateToNotes,
   updateNoteFretAtSlot,
   createNotesInSelection,
   deleteSelectionFromNotes,
   moveNotes,
   combineDurationInSelection,
+  makeTupletInSelection,
   splitDurationToNotes,
 } from '../core/gridEditorModel';
+import type { GridNoteForRiff } from '../core/gridEditorModel';
 import { applyDurationResizeToNotes } from '../core/riffGrid';
 import { GridNoteChip } from '../components/GridNoteChip';
 import {
@@ -71,6 +74,9 @@ type StateTestNote = {
   selected: boolean;
   /** Notes with the same chordId move/resize/cut/copy/delete as a vertical chord group. */
   chordId: string | null;
+  /** If set, this note belongs to a RhythmGroup (e.g. combined duration or tuplet). */
+  rhythmGroupId?: string;
+  indexInGroup?: number;
 };
 
 function genNoteId() {
@@ -79,6 +85,21 @@ function genNoteId() {
 
 function genChordId() {
   return `chord-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Convert GridNoteForRiff[] (from riffNotesToGridNotes) to StateTestNote[] for grid display. */
+function gridNotesToStateTestNotes(g: GridNoteForRiff[]): StateTestNote[] {
+  return g.map((n) => ({
+    id: n.id ?? genNoteId(),
+    row: n.row,
+    startCol: n.startCol,
+    endCol: n.endCol,
+    value: n.value,
+    selected: false,
+    chordId: null,
+    rhythmGroupId: n.rhythmGroupId,
+    indexInGroup: n.indexInGroup,
+  }));
 }
 
 /** Merge overlapping or adjacent column ranges [startCol, endCol] into disjoint ranges. */
@@ -125,10 +146,22 @@ type StateTestGridProps = {
   stringLabels?: string[];
   notes: StateTestNote[];
   onNotesChange: (updater: (prev: StateTestNote[]) => StateTestNote[]) => void;
+  /** Rhythm groups (tuplets etc.) for bracket + compressed note rendering */
+  rhythmGroups?: RhythmGroup[];
+  /** Cell-key selection for rhythm actions (triplet/sextuplet). */
+  selection?: Set<string>;
+  /** Called when user changes selection (click cell or note) so parent can enable triplet/sextuplet etc. */
+  onSelectionChange?: (cellKeys: Set<string>) => void;
+  /** True when selection is a single note or duration group (enables triplet/sextuplet). */
+  canApplyTuplet?: boolean;
+  onMakeTriplet?: () => void;
+  onMakeSextuplet?: () => void;
   /** Current playback column index for playhead; -1 when not playing. */
   activeColumnIndex?: number;
   /** Ref for the horizontal scroll container (used for auto-scroll). */
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
+  /** When pasting a tuplet, call with the new group so parent can add it to riff.rhythmGroups. */
+  onPasteRhythmGroup?: (group: RhythmGroup) => void;
 };
 
 function StateTestGrid({
@@ -138,13 +171,154 @@ function StateTestGrid({
   stringLabels = DEFAULT_STRING_LABELS,
   notes,
   onNotesChange,
+  rhythmGroups = [],
+  selection,
+  onSelectionChange,
+  canApplyTuplet = false,
+  onMakeTriplet,
+  onMakeSextuplet,
   activeColumnIndex = -1,
   scrollContainerRef,
+  onPasteRhythmGroup,
 }: StateTestGridProps) {
   const TEST_ROWS = 6;
+  const tupletGroupsById = useMemo(() => {
+    const map = new Map<string, RhythmGroup>();
+    for (const g of rhythmGroups) {
+      if (g.type === 'tuplet' && g.tupletRatio) map.set(g.id, g);
+    }
+    return map;
+  }, [rhythmGroups]);
 
-  type ClipboardItem = { rowOffset: number; startCol: number; endCol: number; value: number };
-  const [clipboard, setClipboard] = useState<{ originRow: number; originCol: number; items: ClipboardItem[] } | null>(null);
+  /** Per-group span from actual note positions (so drop moves the visual; not tied to group.startSlot/endSlot). */
+  const tupletSpanFromNotes = useMemo(() => {
+    const map = new Map<string, { startCol: number; endCol: number }>();
+    for (const g of rhythmGroups) {
+      if (g.type !== 'tuplet' || !g.tupletRatio) continue;
+      const notesInGroup = notes.filter((n) => n.rhythmGroupId === g.id);
+      if (notesInGroup.length === 0) {
+        map.set(g.id, { startCol: g.startSlot, endCol: g.endSlot });
+        continue;
+      }
+      const startCol = Math.min(...notesInGroup.map((n) => n.startCol));
+      const endCol = Math.max(...notesInGroup.map((n) => n.endCol));
+      map.set(g.id, { startCol, endCol });
+    }
+    return map;
+  }, [rhythmGroups, notes]);
+
+  /** Visual leftPx and widthPx for a note (tuplet-compressed or normal). Uses notes' positions for tuplets. */
+  const getNoteVisualBounds = useCallback(
+    (note: StateTestNote): { leftPx: number; widthPx: number } => {
+      const g = note.rhythmGroupId ? tupletGroupsById.get(note.rhythmGroupId) : null;
+      if (g && g.tupletRatio) {
+        const span = note.rhythmGroupId ? tupletSpanFromNotes.get(note.rhythmGroupId) : null;
+        const startCol = span?.startCol ?? g.startSlot;
+        const endCol = span?.endCol ?? g.endSlot;
+        const spanSlots = endCol - startCol + 1;
+        const nNotes = g.tupletRatio.n;
+        const idx = note.indexInGroup ?? 0;
+        const leftCol = startCol + (idx / nNotes) * spanSlots;
+        const slotWidth = spanSlots / nNotes;
+        return {
+          leftPx: leftCol * COLUMN_WIDTH,
+          widthPx: slotWidth * COLUMN_WIDTH,
+        };
+      }
+      return {
+        leftPx: note.startCol * COLUMN_WIDTH,
+        widthPx: (note.endCol - note.startCol + 1) * COLUMN_WIDTH,
+      };
+    },
+    [tupletGroupsById, tupletSpanFromNotes]
+  );
+
+  /** Rest positions in tuplet groups: (row, indexInGroup) missing a note → (leftPx, topPx). */
+  const tupletRestPositions = useMemo(() => {
+    const positions: { row: number; leftPx: number; topPx: number }[] = [];
+    for (const g of rhythmGroups) {
+      if (g.type !== 'tuplet' || !g.tupletRatio) continue;
+      const n = g.tupletRatio.n;
+      const span = tupletSpanFromNotes.get(g.id);
+      const startCol = span?.startCol ?? g.startSlot;
+      const endCol = span?.endCol ?? g.endSlot;
+      const spanSlots = endCol - startCol + 1;
+      const notesInGroup = notes.filter((n) => n.rhythmGroupId === g.id);
+      const byString = new Map<number, Set<number>>();
+      for (const note of notesInGroup) {
+        const r = note.row;
+        if (!byString.has(r)) byString.set(r, new Set());
+        const idx = note.indexInGroup ?? 0;
+        byString.get(r)!.add(idx);
+      }
+      byString.forEach((indices, row) => {
+        for (let i = 0; i < n; i++) {
+          if (indices.has(i)) continue;
+          const leftCol = startCol + (i / n) * spanSlots;
+          positions.push({
+            row,
+            leftPx: leftCol * COLUMN_WIDTH,
+            topPx: row * ROW_HEIGHT,
+          });
+        }
+      });
+    }
+    return positions;
+  }, [rhythmGroups, notes, tupletSpanFromNotes]);
+
+  /** Tuplet connector dots: between consecutive notes in the same row within a rhythm group (like chord dots). */
+  const tupletConnectorDots = useMemo(() => {
+    const dots: { centerX: number; centerY: number; rhythmGroupId: string; selected: boolean }[] = [];
+    for (const g of rhythmGroups) {
+      if (g.type !== 'tuplet' || !g.tupletRatio) continue;
+      const notesInGroup = notes.filter((n) => n.rhythmGroupId === g.id);
+      const groupSelected = notesInGroup.some((n) => n.selected);
+      const span = tupletSpanFromNotes.get(g.id);
+      const startCol = span?.startCol ?? g.startSlot;
+      const endCol = span?.endCol ?? g.endSlot;
+      const spanSlots = endCol - startCol + 1;
+      const nNotes = g.tupletRatio.n;
+      const byRow = new Map<number, StateTestNote[]>();
+      for (const n of notesInGroup) {
+        if (!byRow.has(n.row)) byRow.set(n.row, []);
+        byRow.get(n.row)!.push(n);
+      }
+      byRow.forEach((rowNotes, row) => {
+        const sorted = [...rowNotes].sort((a, b) => (a.indexInGroup ?? 0) - (b.indexInGroup ?? 0));
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const a = sorted[i];
+          const b = sorted[i + 1];
+          const idxA = a.indexInGroup ?? 0;
+          const idxB = b.indexInGroup ?? 0;
+          const leftColA = startCol + (idxA / nNotes) * spanSlots;
+          const slotWidth = spanSlots / nNotes;
+          const leftPxA = leftColA * COLUMN_WIDTH;
+          const widthPxA = slotWidth * COLUMN_WIDTH;
+          const leftColB = startCol + (idxB / nNotes) * spanSlots;
+          const leftPxB = leftColB * COLUMN_WIDTH;
+          const centerX = (leftPxA + widthPxA + leftPxB) / 2;
+          const centerY = row * ROW_HEIGHT + ROW_HEIGHT / 2;
+          dots.push({ centerX, centerY, rhythmGroupId: g.id, selected: groupSelected });
+        }
+      });
+    }
+    return dots;
+  }, [rhythmGroups, notes, tupletSpanFromNotes]);
+
+  type ClipboardItem = {
+    rowOffset: number;
+    startCol: number;
+    endCol: number;
+    value: number;
+    indexInGroup?: number;
+  };
+  type ClipboardRhythmGroup = { tupletRatio: { n: number; d: number }; spanCols: number };
+  const [clipboard, setClipboard] = useState<{
+    originRow: number;
+    originCol: number;
+    items: ClipboardItem[];
+    rhythmGroup?: ClipboardRhythmGroup;
+  } | null>(null);
   const [undoStack, setUndoStack] = useState<StateTestNote[][]>([]);
   const [redoStack, setRedoStack] = useState<StateTestNote[][]>([]);
   const isUndoRedoRef = useRef(false);
@@ -171,12 +345,27 @@ function StateTestGrid({
   selectedCellRef.current = selectedCell;
   const setSelectedCellRef = useRef(setSelectedCell);
   setSelectedCellRef.current = setSelectedCell;
+
+  // Sync selection to parent so triplet/sextuplet buttons can be enabled
+  useEffect(() => {
+    if (!onSelectionChange) return;
+    const keys = new Set<string>();
+    if (selectedCell != null) keys.add(cellKey(selectedCell.row, selectedCell.col));
+    notes.filter((n) => n.selected).forEach((n) => {
+      for (let c = n.startCol; c <= n.endCol; c++) keys.add(cellKey(n.row, c));
+    });
+    onSelectionChange(keys);
+  }, [selectedCell, notes, onSelectionChange]);
+
   const [dragState, setDragState] = useState<{
     noteId: string;
     anchorRow: number;
     anchorCol: number;
     anchorStartCol: number;
     anchorEndCol: number;
+    /** Visual left/width (px) of the anchor note for ghost-relative positioning and drop target */
+    anchorVisualLeftPx: number;
+    anchorVisualWidthPx: number;
     anchorOffsetX: number;
     anchorOffsetY: number;
     currentRow: number;
@@ -193,6 +382,8 @@ function StateTestGrid({
     visualWidthPx: number;
   } | null>(null);
   const [dragGhost, setDragGhost] = useState<{ clientX: number; clientY: number } | null>(null);
+  /** Last mouse position during drag (updated every mousemove) so mouseup computes drop position from it. */
+  const dragLastMouseRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const [marqueeState, setMarqueeState] = useState<{
     startRow: number;
     startCol: number;
@@ -242,13 +433,15 @@ function StateTestGrid({
   function getPastePositionBounds(
     items: ClipboardItem[],
     cols: number,
-    rows: number
+    rows: number,
+    spanColsOverride?: number
   ): { pasteRowMin: number; pasteRowMax: number; pasteColMin: number; pasteColMax: number } | null {
     if (items.length === 0) return null;
     const minRowOffset = Math.min(...items.map((i) => i.rowOffset));
     const maxRowOffset = Math.max(...items.map((i) => i.rowOffset));
-    const minStartCol = Math.min(...items.map((i) => i.startCol));
-    const maxEndCol = Math.max(...items.map((i) => i.endCol));
+    const minStartCol = spanColsOverride != null ? 0 : Math.min(...items.map((i) => i.startCol));
+    const maxEndCol =
+      spanColsOverride != null ? spanColsOverride - 1 : Math.max(...items.map((i) => i.endCol));
     const pasteRowMin = -minRowOffset;
     const pasteRowMax = rows - 1 - maxRowOffset;
     const pasteColMin = -minStartCol;
@@ -280,12 +473,13 @@ function StateTestGrid({
     return { deltaRowMin, deltaRowMax, deltaColMin, deltaColMax };
   }
 
-  /** Expand a set of selected note ids to include all chord mates (notes with same chordId). */
+  /** Expand a set of selected note ids to include chord mates (not rhythm-group: notes are selected individually). */
   const expandSelectionWithChordMates = useCallback(
     (noteList: StateTestNote[], selectedIds: Set<string>): Set<string> => {
       const expanded = new Set(selectedIds);
       for (const n of noteList) {
-        if (n.chordId && selectedIds.has(n.id)) {
+        if (!selectedIds.has(n.id)) continue;
+        if (n.chordId) {
           for (const m of noteList) {
             if (m.chordId === n.chordId) expanded.add(m.id);
           }
@@ -306,46 +500,90 @@ function StateTestGrid({
   const handleSplitIntoNotesRef = useRef<() => void>(() => {});
   const handleCombineIntoChordRef = useRef<() => void>(() => {});
 
-  const handleCopy = useCallback(() => {
+  /** Expand selected notes to include full rhythm groups (so copy/cut includes entire tuplet). */
+  const notesToCopyOrCut = useMemo(() => {
     const selected = notes.filter((n) => n.selected);
-    if (selected.length === 0) return;
-    const originRow = Math.min(...selected.map((n) => n.row));
-    const originCol = Math.min(...selected.map((n) => n.startCol));
+    if (selected.length === 0) return [];
+    const ids = new Set(selected.map((n) => n.id));
+    for (const n of selected) {
+      if (n.rhythmGroupId) {
+        for (const m of notes) {
+          if (m.rhythmGroupId === n.rhythmGroupId) ids.add(m.id);
+        }
+      }
+    }
+    return notes.filter((n) => ids.has(n.id));
+  }, [notes]);
+
+  const handleCopy = useCallback(() => {
+    const toCopy = notesToCopyOrCut;
+    if (toCopy.length === 0) return;
+    const originRow = Math.min(...toCopy.map((n) => n.row));
+    const originCol = Math.min(...toCopy.map((n) => n.startCol));
+    const gid = toCopy[0]?.rhythmGroupId;
+    const group = gid && toCopy.every((n) => n.rhythmGroupId === gid) ? tupletGroupsById.get(gid) : null;
+    const rhythmGroup: ClipboardRhythmGroup | undefined =
+      group?.tupletRatio != null
+        ? {
+            tupletRatio: group.tupletRatio,
+            spanCols: Math.min(totalColumns, group.endSlot - group.startSlot + 1),
+          }
+        : undefined;
     setClipboard({
       originRow,
       originCol,
-      items: selected.map((n) => ({
+      items: toCopy.map((n) => ({
         rowOffset: n.row - originRow,
         startCol: n.startCol - originCol,
         endCol: n.endCol - originCol,
         value: n.value,
+        indexInGroup: rhythmGroup != null ? (n.indexInGroup ?? 0) : undefined,
       })),
+      rhythmGroup,
     });
-  }, [notes]);
+  }, [notesToCopyOrCut, tupletGroupsById, totalColumns]);
   handleCopyRef.current = handleCopy;
 
   const handleCut = useCallback(() => {
-    const selected = notes.filter((n) => n.selected);
-    if (selected.length === 0) return;
-    const originRow = Math.min(...selected.map((n) => n.row));
-    const originCol = Math.min(...selected.map((n) => n.startCol));
+    const toCut = notesToCopyOrCut;
+    if (toCut.length === 0) return;
+    const originRow = Math.min(...toCut.map((n) => n.row));
+    const originCol = Math.min(...toCut.map((n) => n.startCol));
+    const gid = toCut[0]?.rhythmGroupId;
+    const group = gid && toCut.every((n) => n.rhythmGroupId === gid) ? tupletGroupsById.get(gid) : null;
+    const rhythmGroup: ClipboardRhythmGroup | undefined =
+      group?.tupletRatio != null
+        ? {
+            tupletRatio: group.tupletRatio,
+            spanCols: Math.min(totalColumns, group.endSlot - group.startSlot + 1),
+          }
+        : undefined;
+    const toCutIds = new Set(toCut.map((n) => n.id));
     setClipboard({
       originRow,
       originCol,
-      items: selected.map((n) => ({
+      items: toCut.map((n) => ({
         rowOffset: n.row - originRow,
         startCol: n.startCol - originCol,
         endCol: n.endCol - originCol,
         value: n.value,
+        indexInGroup: rhythmGroup != null ? (n.indexInGroup ?? 0) : undefined,
       })),
+      rhythmGroup,
     });
-    applyMutation((prev) => prev.filter((n) => !n.selected));
-  }, [notes, applyMutation]);
+    applyMutation((prev) => prev.filter((n) => !toCutIds.has(n.id)));
+  }, [notesToCopyOrCut, tupletGroupsById, totalColumns, applyMutation]);
   handleCutRef.current = handleCut;
 
   const handlePaste = useCallback(() => {
     if (!clipboard || clipboard.items.length === 0) return;
-    const bounds = getPastePositionBounds(clipboard.items, totalColumns, TEST_ROWS);
+    const rg = clipboard.rhythmGroup;
+    const bounds = getPastePositionBounds(
+      clipboard.items,
+      totalColumns,
+      TEST_ROWS,
+      rg?.spanCols
+    );
     if (!bounds) return;
     const selected = notes.filter((n) => n.selected);
     const desiredPasteRow =
@@ -358,22 +596,50 @@ function StateTestGrid({
         : selectedCell?.col ?? 0;
     const pasteRow = Math.max(bounds.pasteRowMin, Math.min(bounds.pasteRowMax, desiredPasteRow));
     const pasteCol = Math.max(bounds.pasteColMin, Math.min(bounds.pasteColMax, desiredPasteCol));
+    const newGroupId = rg ? `rg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` : null;
     applyMutation((prev) => {
       const pastedChordId = genChordId();
-      const newNotes: StateTestNote[] = clipboard.items.map((item) => {
-        const row = pasteRow + item.rowOffset;
-        const startCol = pasteCol + item.startCol;
-        const endCol = pasteCol + item.endCol;
-        return {
-          id: genNoteId(),
-          row,
-          startCol,
-          endCol,
-          value: item.value,
-          selected: true,
-          chordId: pastedChordId,
-        };
-      });
+      const newNotes: StateTestNote[] =
+        rg != null && newGroupId != null
+          ? (() => {
+              const n = rg.tupletRatio.n;
+              const spanCols = rg.spanCols;
+              return clipboard.items.map((item) => {
+                const row = pasteRow + item.rowOffset;
+                const idx = item.indexInGroup ?? 0;
+                const onsetCol = Math.floor((idx * spanCols) / n);
+                const nextOnsetCol =
+                  idx < n - 1 ? Math.floor(((idx + 1) * spanCols) / n) : spanCols;
+                const duration = Math.max(1, nextOnsetCol - onsetCol);
+                const startCol = pasteCol + onsetCol;
+                const endCol = pasteCol + onsetCol + duration - 1;
+                return {
+                  id: genNoteId(),
+                  row,
+                  startCol: Math.min(startCol, totalColumns - 1),
+                  endCol: Math.min(endCol, totalColumns - 1),
+                  value: item.value,
+                  selected: true,
+                  chordId: pastedChordId,
+                  rhythmGroupId: newGroupId,
+                  indexInGroup: idx,
+                };
+              });
+            })()
+          : clipboard.items.map((item) => {
+              const row = pasteRow + item.rowOffset;
+              const startCol = pasteCol + item.startCol;
+              const endCol = pasteCol + item.endCol;
+              return {
+                id: genNoteId(),
+                row,
+                startCol,
+                endCol,
+                value: item.value,
+                selected: true,
+                chordId: pastedChordId,
+              };
+            });
       const dropFootprint = new Map<number, [number, number][]>();
       for (const n of newNotes) {
         const start = Math.max(0, n.startCol);
@@ -417,8 +683,21 @@ function StateTestGrid({
       );
       return [...existingCleaned.map((n) => ({ ...n, selected: false })), ...newNotes];
     });
+    if (clipboard.rhythmGroup != null && newGroupId != null && onPasteRhythmGroup) {
+      const strings = [
+        ...new Set(clipboard.items.map((i) => pasteRow + i.rowOffset + 1)),
+      ].sort((a, b) => a - b);
+      onPasteRhythmGroup({
+        id: newGroupId,
+        startSlot: pasteCol,
+        endSlot: pasteCol + clipboard.rhythmGroup.spanCols - 1,
+        type: 'tuplet',
+        tupletRatio: clipboard.rhythmGroup.tupletRatio,
+        strings,
+      });
+    }
     if (selected.length === 0 && selectedCell != null) setSelectedCell(null);
-  }, [clipboard, notes, selectedCell, applyMutation, TEST_ROWS, totalColumns]);
+  }, [clipboard, notes, selectedCell, applyMutation, TEST_ROWS, totalColumns, onPasteRhythmGroup]);
   handlePasteRef.current = handlePaste;
 
   const handleSplitIntoNotes = useCallback(() => {
@@ -583,6 +862,7 @@ function StateTestGrid({
   const handleResizeHandleMouseDown = (note: StateTestNote, edge: 'left' | 'right', e: React.MouseEvent) => {
     e.stopPropagation();
     if (resizeState || dragState) return;
+    if (note.rhythmGroupId) return;
     setSelectedCell(null);
     onNotesChange((prev) => {
       const primaryIds = new Set([note.id]);
@@ -701,34 +981,36 @@ function StateTestGrid({
       if (dragState) {
         setDragGhost({ clientX: e.clientX, clientY: e.clientY });
         const gridEl = gridWrapperRef.current;
+        const scrollEl = scrollContainerRef?.current ?? (gridEl?.parentElement?.parentElement as HTMLDivElement | null) ?? null;
         if (gridEl) {
-          const rect = gridEl.getBoundingClientRect();
-          const anchorPointClientX =
-            e.clientX -
-            dragState.anchorOffsetX +
-            (dragState.anchorCol - dragState.anchorStartCol) * COLUMN_WIDTH +
-            COLUMN_WIDTH / 2;
-          const anchorPointClientY =
-            e.clientY - dragState.anchorOffsetY + ROW_HEIGHT / 2;
-          const localX = anchorPointClientX - rect.left;
-          const localY = anchorPointClientY - rect.top;
-          const col = Math.floor(localX / COLUMN_WIDTH);
-          const row = Math.floor(localY / ROW_HEIGHT);
+          const scrollLeft = scrollEl?.scrollLeft ?? 0;
+          const scrollRect = scrollEl?.getBoundingClientRect() ?? gridEl.getBoundingClientRect();
+          const gridRect = gridEl.getBoundingClientRect();
+          const cursorLocalX = e.clientX - scrollRect.left + scrollLeft;
+          const cursorLocalY = e.clientY - gridRect.top;
+          const grabPointLocalX = cursorLocalX - dragState.anchorOffsetX;
+          let col = Math.round(grabPointLocalX / COLUMN_WIDTH);
+          const row = Math.floor(cursorLocalY / ROW_HEIGHT);
           let desiredRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
-          const desiredCol = Math.max(0, Math.min(totalColumns - 1, col));
+          const anchorNote = notesRef.current.find((n) => n.id === dragState.noteId);
+          const notesToMove =
+            anchorNote?.rhythmGroupId
+              ? notesRef.current.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
+              : notesRef.current.filter((n) => n.selected);
+          let desiredCol = Math.max(0, Math.min(totalColumns - 1, col));
           const note = notesRef.current.find((n) => n.id === dragState.noteId);
           const isFullHeightChord =
             note?.chordId &&
             notesRef.current.filter((n) => n.chordId === note.chordId).length === TEST_ROWS;
           if (isFullHeightChord) desiredRow = dragState.anchorRow;
-          const selectedNotes = notesRef.current.filter((n) => n.selected);
-          const bounds = getDragDeltaBounds(selectedNotes, totalColumns, TEST_ROWS);
+          const bounds = getDragDeltaBounds(notesToMove, totalColumns, TEST_ROWS);
           const rawDeltaRow = desiredRow - dragState.anchorRow;
           const rawDeltaCol = desiredCol - dragState.anchorCol;
           const deltaRow = Math.max(bounds.deltaRowMin, Math.min(bounds.deltaRowMax, rawDeltaRow));
           const deltaCol = Math.max(bounds.deltaColMin, Math.min(bounds.deltaColMax, rawDeltaCol));
           const currentRow = dragState.anchorRow + deltaRow;
           const currentCol = dragState.anchorCol + deltaCol;
+          dragLastMouseRef.current = { clientX: e.clientX, clientY: e.clientY };
           setDragState((prev) =>
             prev ? { ...prev, currentRow, currentCol } : null
           );
@@ -764,23 +1046,29 @@ function StateTestGrid({
       if (dx * dx + dy * dy <= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
       const note = notesRef.current.find((n) => n.id === pending.noteId);
       if (note) {
+        const scrollEl = scrollContainerRef?.current;
         const gridEl = gridWrapperRef.current;
+        const { leftPx: anchorVisualLeftPx, widthPx: anchorVisualWidthPx } = getNoteVisualBounds(note);
         let anchorOffsetX = 0;
         let anchorOffsetY = 0;
-        if (gridEl) {
-          const rect = gridEl.getBoundingClientRect();
-          const noteLeft = rect.left + note.startCol * COLUMN_WIDTH;
-          const noteTop = rect.top + note.row * ROW_HEIGHT;
-          anchorOffsetX = pending.clientX - noteLeft;
-          anchorOffsetY = pending.clientY - noteTop;
+        if (scrollEl && gridEl) {
+          const scrollRect = scrollEl.getBoundingClientRect();
+          const scrollLeft = scrollEl.scrollLeft;
+          const anchorNoteScreenLeft = scrollRect.left - scrollLeft + anchorVisualLeftPx;
+          const anchorNoteScreenTop = gridEl.getBoundingClientRect().top + note.row * ROW_HEIGHT;
+          anchorOffsetX = pending.clientX - anchorNoteScreenLeft;
+          anchorOffsetY = pending.clientY - anchorNoteScreenTop;
         }
         setDragGhost({ clientX: e.clientX, clientY: e.clientY });
+        dragLastMouseRef.current = { clientX: e.clientX, clientY: e.clientY };
         setDragState({
           noteId: note.id,
           anchorRow: pending.anchorRow,
           anchorCol: pending.anchorCol,
           anchorStartCol: note.startCol,
           anchorEndCol: note.endCol,
+          anchorVisualLeftPx,
+          anchorVisualWidthPx,
           anchorOffsetX,
           anchorOffsetY,
           currentRow: pending.anchorRow,
@@ -894,24 +1182,71 @@ function StateTestGrid({
       }
       if (dragState) {
         setDragGhost(null);
-        const {
-          anchorRow,
-          anchorCol,
-          currentRow,
-          currentCol,
-        } = dragState;
-        const selectedNotes = notesRef.current.filter((n) => n.selected);
-        const bounds = getDragDeltaBounds(selectedNotes, totalColumns, TEST_ROWS);
-        const deltaRow = Math.max(bounds.deltaRowMin, Math.min(bounds.deltaRowMax, currentRow - anchorRow));
-        const deltaCol = Math.max(bounds.deltaColMin, Math.min(bounds.deltaColMax, currentCol - anchorCol));
+        const { anchorRow, anchorCol } = dragState;
+        const anchorNote = notesRef.current.find((n) => n.id === dragState.noteId);
+        const notesToMove =
+          anchorNote?.rhythmGroupId
+            ? notesRef.current.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
+            : notesRef.current.filter((n) => n.selected);
+        const notesToMoveIds = new Set(notesToMove.map((n) => n.id));
+        const bounds = getDragDeltaBounds(notesToMove, totalColumns, TEST_ROWS);
+        let deltaRow = Math.max(bounds.deltaRowMin, Math.min(bounds.deltaRowMax, dragState.currentRow - anchorRow));
+        let deltaCol = Math.max(bounds.deltaColMin, Math.min(bounds.deltaColMax, dragState.currentCol - anchorCol));
+        const lastMouse = dragLastMouseRef.current;
+        dragLastMouseRef.current = null;
+        if (lastMouse) {
+          const gridEl = gridWrapperRef.current;
+          const scrollEl = scrollContainerRef?.current ?? (gridEl?.parentElement?.parentElement as HTMLDivElement | null) ?? null;
+          if (gridEl) {
+            const scrollLeft = scrollEl?.scrollLeft ?? 0;
+            const scrollRect = scrollEl?.getBoundingClientRect() ?? gridEl.getBoundingClientRect();
+            const gridRect = gridEl.getBoundingClientRect();
+            const cursorLocalX = lastMouse.clientX - scrollRect.left + scrollLeft;
+            const cursorLocalY = lastMouse.clientY - gridRect.top;
+            const grabPointLocalX = cursorLocalX - dragState.anchorOffsetX;
+            const col = Math.round(grabPointLocalX / COLUMN_WIDTH);
+            const row = Math.floor(cursorLocalY / ROW_HEIGHT);
+            let desiredRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
+            const note = notesRef.current.find((n) => n.id === dragState.noteId);
+            const isFullHeightChord =
+              note?.chordId &&
+              notesRef.current.filter((n) => n.chordId === note.chordId).length === TEST_ROWS;
+            if (isFullHeightChord) desiredRow = dragState.anchorRow;
+            const desiredCol = Math.max(0, Math.min(totalColumns - 1, col));
+            const rawDeltaRow = desiredRow - anchorRow;
+            const rawDeltaCol = desiredCol - anchorCol;
+            deltaRow = Math.max(bounds.deltaRowMin, Math.min(bounds.deltaRowMax, rawDeltaRow));
+            deltaCol = Math.max(bounds.deltaColMin, Math.min(bounds.deltaColMax, rawDeltaCol));
+          }
+        }
         const isValidDrop =
           (deltaRow !== 0 || deltaCol !== 0);
 
         if (isValidDrop) {
-          applyMutationRef.current((prev) => {
-            const dropFootprint = new Map<number, [number, number][]>();
-            for (const n of prev) {
-              if (!n.selected) continue;
+          // Build the new notes array here so we use the delta we just computed (no closure).
+          const prev = notesRef.current;
+          const dropFootprint = new Map<number, [number, number][]>();
+          for (const n of prev) {
+            if (!notesToMoveIds.has(n.id)) continue;
+            const newRow = Math.max(0, Math.min(TEST_ROWS - 1, n.row + deltaRow));
+            const newStartCol = Math.max(
+              0,
+              Math.min(totalColumns - 1, n.startCol + deltaCol)
+            );
+            const span = n.endCol - n.startCol + 1;
+            const newEndCol = Math.max(
+              newStartCol,
+              Math.min(totalColumns - 1, newStartCol + span - 1)
+            );
+            if (!dropFootprint.has(newRow)) dropFootprint.set(newRow, []);
+            dropFootprint.get(newRow)!.push([newStartCol, newEndCol]);
+          }
+          for (const row of dropFootprint.keys()) {
+            dropFootprint.set(row, mergeColumnRanges(dropFootprint.get(row)!));
+          }
+          const brokenChordIds = new Set<string>();
+          const result = prev.flatMap((n) => {
+            if (notesToMoveIds.has(n.id)) {
               const newRow = Math.max(0, Math.min(TEST_ROWS - 1, n.row + deltaRow));
               const newStartCol = Math.max(
                 0,
@@ -922,65 +1257,45 @@ function StateTestGrid({
                 newStartCol,
                 Math.min(totalColumns - 1, newStartCol + span - 1)
               );
-              if (!dropFootprint.has(newRow)) dropFootprint.set(newRow, []);
-              dropFootprint.get(newRow)!.push([newStartCol, newEndCol]);
+              return [
+                {
+                  ...n,
+                  row: newRow,
+                  startCol: newStartCol,
+                  endCol: newEndCol,
+                  selected: false,
+                },
+              ];
             }
-            for (const row of dropFootprint.keys()) {
-              dropFootprint.set(row, mergeColumnRanges(dropFootprint.get(row)!));
+            if (!dropFootprint.has(n.row)) return [n];
+            const dropRanges = dropFootprint.get(n.row)!;
+            let intervals: [number, number][] = [[n.startCol, n.endCol]];
+            for (const hole of dropRanges) {
+              intervals = subtractRangeFromIntervals(intervals, hole);
             }
-            const brokenChordIds = new Set<string>();
-            const result = prev.flatMap((n) => {
-              if (n.selected) {
-                const newRow = Math.max(0, Math.min(TEST_ROWS - 1, n.row + deltaRow));
-                const newStartCol = Math.max(
-                  0,
-                  Math.min(totalColumns - 1, n.startCol + deltaCol)
-                );
-                const span = n.endCol - n.startCol + 1;
-                const newEndCol = Math.max(
-                  newStartCol,
-                  Math.min(totalColumns - 1, newStartCol + span - 1)
-                );
-                return [
-                  {
-                    ...n,
-                    row: newRow,
-                    startCol: newStartCol,
-                    endCol: newEndCol,
-                    selected: false,
-                  },
-                ];
-              }
-              if (!dropFootprint.has(n.row)) return [n];
-              const dropRanges = dropFootprint.get(n.row)!;
-              let intervals: [number, number][] = [[n.startCol, n.endCol]];
-              for (const hole of dropRanges) {
-                intervals = subtractRangeFromIntervals(intervals, hole);
-              }
-              if (intervals.length === 0) {
-                if (n.chordId) brokenChordIds.add(n.chordId);
-                return [];
-              }
-              // No actual overlap: footprint didn't touch this note, leave it unchanged
-              if (
-                intervals.length === 1 &&
-                intervals[0][0] === n.startCol &&
-                intervals[0][1] === n.endCol
-              )
-                return [n];
+            if (intervals.length === 0) {
               if (n.chordId) brokenChordIds.add(n.chordId);
-              return intervals.map(([a, b]) => ({
-                ...n,
-                id: genNoteId(),
-                startCol: a,
-                endCol: b,
-                chordId: null,
-              }));
-            });
-            return result.map((n) =>
-              n.chordId && brokenChordIds.has(n.chordId) ? { ...n, chordId: null } : n
-            );
+              return [];
+            }
+            if (
+              intervals.length === 1 &&
+              intervals[0][0] === n.startCol &&
+              intervals[0][1] === n.endCol
+            )
+              return [n];
+            if (n.chordId) brokenChordIds.add(n.chordId);
+            return intervals.map(([a, b]) => ({
+              ...n,
+              id: genNoteId(),
+              startCol: a,
+              endCol: b,
+              chordId: null,
+            }));
           });
+          const resultWithChordsCleared = result.map((n) =>
+            n.chordId && brokenChordIds.has(n.chordId) ? { ...n, chordId: null } : n
+          );
+          applyMutationRef.current((_prev) => resultWithChordsCleared);
         } else {
           onNotesChange((prev) =>
             prev.map((n) => ({ ...n, selected: false }))
@@ -1026,7 +1341,7 @@ function StateTestGrid({
       window.removeEventListener('mouseleave', clearMarqueeIfActive);
       window.removeEventListener('blur', clearMarqueeIfActive);
     };
-  }, [dragState, resizeState, TEST_ROWS, totalColumns]);
+  }, [dragState, resizeState, TEST_ROWS, totalColumns, getNoteVisualBounds]);
 
   // Digit keys: create note at selected empty cell, or update single selected note. Backspace/Delete: clear selected cell or remove selected notes.
   useEffect(() => {
@@ -1322,6 +1637,27 @@ function StateTestGrid({
         >
           <Minimize2 className="w-4 h-4" />
         </button>
+        <span className="w-px h-4 bg-bg-tertiary" aria-hidden />
+        <button
+          type="button"
+          onClick={onMakeTriplet}
+          disabled={!canApplyTuplet || !onMakeTriplet}
+          title="Make triplet (3 in 4)"
+          aria-label="Make triplet"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary font-semibold text-sm w-8"
+        >
+          3
+        </button>
+        <button
+          type="button"
+          onClick={onMakeSextuplet}
+          disabled={!canApplyTuplet || !onMakeSextuplet}
+          title="Make sextuplet (6 in 4)"
+          aria-label="Make sextuplet"
+          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary font-semibold text-sm w-8"
+        >
+          6
+        </button>
         <button
           type="button"
           onClick={handleClearAll}
@@ -1334,7 +1670,7 @@ function StateTestGrid({
         </button>
       </div>
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-      <div className="flex-1 min-h-0 rounded-lg border border-bg-tertiary bg-bg-secondary/80 p-4 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 rounded-lg border border-bg-tertiary p-4 flex flex-col overflow-hidden">
       <div
         className="flex shrink-0"
         style={{ height: GRID_FIXED_HEIGHT + GRID_SCROLLBAR_GAP }}
@@ -1461,6 +1797,24 @@ function StateTestGrid({
             aria-hidden
           />
         )}
+        {/* SMuFL rest glyphs in tuplet gaps */}
+        {tupletRestPositions.map((pos, i) => (
+          <div
+            key={`rest-${i}`}
+            className="absolute pointer-events-none z-5 flex items-center justify-center text-text-secondary"
+            style={{
+              left: pos.leftPx,
+              top: pos.topPx,
+              width: COLUMN_WIDTH,
+              height: ROW_HEIGHT,
+              fontFamily: 'Bravura',
+              fontSize: 20,
+            }}
+            aria-label="Rest"
+          >
+            {'\uE4E7'}
+          </div>
+        ))}
         {/* Dot grid at intersections */}
         {Array.from({ length: TEST_ROWS + 1 }, (_, r) =>
           Array.from({ length: totalColumns + 1 }, (_, c) => (
@@ -1478,17 +1832,44 @@ function StateTestGrid({
           ))
         )}
 
-        {/* Drop targets: one per selected note, each moved by same delta as primary */}
+        {/* Drop targets: for rhythm groups always one 4-cell beat; otherwise one per note */}
         {dragState &&
           dragState.currentRow >= 0 &&
           dragState.currentCol >= 0 &&
           (dragState.currentRow !== dragState.anchorRow ||
             dragState.currentCol !== dragState.anchorCol) &&
-          notes
-            .filter((n) => n.selected)
-            .map((note) => {
-              const deltaRow = dragState.currentRow - dragState.anchorRow;
-              const deltaCol = dragState.currentCol - dragState.anchorCol;
+          (() => {
+            const anchorNote = notes.find((n) => n.id === dragState.noteId);
+            const notesToShow =
+              anchorNote?.rhythmGroupId
+                ? notes.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
+                : notes.filter((n) => n.selected);
+            const deltaRow = dragState.currentRow - dragState.anchorRow;
+            const deltaCol = dragState.currentCol - dragState.anchorCol;
+            const currentRow = Math.max(0, Math.min(TEST_ROWS - 1, dragState.anchorRow + deltaRow));
+
+            if (anchorNote?.rhythmGroupId && notesToShow.length > 0) {
+              const minStartCol = Math.min(...notesToShow.map((n) => n.startCol));
+              const leftmostCol = Math.max(0, Math.min(totalColumns - 4, minStartCol + deltaCol));
+              const cellsPerBeat = 4;
+              const widthCols = Math.min(cellsPerBeat, totalColumns - leftmostCol);
+              if (widthCols <= 0) return null;
+              return (
+                <div
+                  key="rhythm-group-drop"
+                  className="absolute border border-pink-100/20 bg-pink-400/20 pointer-events-none"
+                  style={{
+                    left: leftmostCol * COLUMN_WIDTH,
+                    top: currentRow * ROW_HEIGHT,
+                    width: widthCols * COLUMN_WIDTH,
+                    height: ROW_HEIGHT,
+                  }}
+                  aria-hidden
+                />
+              );
+            }
+
+            return notesToShow.map((note) => {
               const newRow = Math.max(0, Math.min(TEST_ROWS - 1, note.row + deltaRow));
               const newStartCol = Math.max(
                 0,
@@ -1514,7 +1895,8 @@ function StateTestGrid({
                   aria-hidden
                 />
               );
-            })}
+            });
+          })()}
 
         {/* Marquee selection rectangle */}
         {marqueeState && (
@@ -1578,6 +1960,7 @@ function StateTestGrid({
 
         {/* All notes as individual chips (including chord notes) */}
         {notes.map((note) => {
+          const anchorNote = dragState != null ? notes.find((n) => n.id === dragState.noteId) : null;
           const isDragging = dragState?.noteId === note.id;
           const chordIsBeingDragged =
             dragState != null &&
@@ -1586,7 +1969,11 @@ function StateTestGrid({
                   (n) => n.id === dragState.noteId && n.chordId === note.chordId
                 )
               : isDragging);
-          if (chordIsBeingDragged) return null;
+          const groupIsBeingDragged =
+            dragState != null &&
+            anchorNote?.rhythmGroupId != null &&
+            note.rhythmGroupId === anchorNote.rhythmGroupId;
+          if (chordIsBeingDragged || groupIsBeingDragged) return null;
           const resizeNote = resizeState ? notes.find((n) => n.id === resizeState.noteId) : null;
           const isResizing =
             resizeState?.noteId === note.id ||
@@ -1601,8 +1988,22 @@ function StateTestGrid({
               leftPx = resizeState.anchorStartCol * COLUMN_WIDTH;
             }
           } else {
-            leftPx = note.startCol * COLUMN_WIDTH;
-            widthPx = (note.endCol - note.startCol + 1) * COLUMN_WIDTH;
+            const tupletGroup = note.rhythmGroupId ? tupletGroupsById.get(note.rhythmGroupId) : null;
+            if (tupletGroup) {
+              const span = note.rhythmGroupId ? tupletSpanFromNotes.get(note.rhythmGroupId) : null;
+              const startCol = span?.startCol ?? tupletGroup.startSlot;
+              const endCol = span?.endCol ?? tupletGroup.endSlot;
+              const spanSlots = endCol - startCol + 1;
+              const nNotes = tupletGroup.tupletRatio?.n ?? 3;
+              const idx = note.indexInGroup ?? 0;
+              const leftCol = startCol + (idx / nNotes) * spanSlots;
+              const slotWidth = spanSlots / nNotes;
+              leftPx = leftCol * COLUMN_WIDTH;
+              widthPx = slotWidth * COLUMN_WIDTH;
+            } else {
+              leftPx = note.startCol * COLUMN_WIDTH;
+              widthPx = (note.endCol - note.startCol + 1) * COLUMN_WIDTH;
+            }
           }
           const hoveredNote =
             hover != null ? findNoteAt(hover.row, hover.col) : null;
@@ -1654,18 +2055,22 @@ function StateTestGrid({
                       state={chipState}
                     />
                   </div>
-                  <div
-                    className="absolute left-0 top-0 bottom-0 cursor-col-resize z-10"
-                    style={{ width: RESIZE_HANDLE_WIDTH_PX }}
-                    onMouseDown={(e) => handleResizeHandleMouseDown(note, 'left', e)}
-                    aria-label="Resize left"
-                  />
-                  <div
-                    className="absolute right-0 top-0 bottom-0 cursor-col-resize z-10"
-                    style={{ width: RESIZE_HANDLE_WIDTH_PX }}
-                    onMouseDown={(e) => handleResizeHandleMouseDown(note, 'right', e)}
-                    aria-label="Resize right"
-                  />
+                  {!note.rhythmGroupId && (
+                    <>
+                      <div
+                        className="absolute left-0 top-0 bottom-0 cursor-col-resize z-10"
+                        style={{ width: RESIZE_HANDLE_WIDTH_PX }}
+                        onMouseDown={(e) => handleResizeHandleMouseDown(note, 'left', e)}
+                        aria-label="Resize left"
+                      />
+                      <div
+                        className="absolute right-0 top-0 bottom-0 cursor-col-resize z-10"
+                        style={{ width: RESIZE_HANDLE_WIDTH_PX }}
+                        onMouseDown={(e) => handleResizeHandleMouseDown(note, 'right', e)}
+                        aria-label="Resize right"
+                      />
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -1735,10 +2140,40 @@ function StateTestGrid({
             );
           });
         })()}
+        {/* Tuplet connector: vertical line between consecutive notes in a group on the same row */}
+        {tupletConnectorDots.map((d, i) => {
+          const anchorNote = dragState != null ? notes.find((n) => n.id === dragState.noteId) : null;
+          if (dragState != null && anchorNote?.rhythmGroupId === d.rhythmGroupId) return null;
+          const hoveredNote = hover != null ? findNoteAt(hover.row, hover.col) : null;
+          const isGroupHovered =
+            hoveredNote?.rhythmGroupId != null && hoveredNote.rhythmGroupId === d.rhythmGroupId;
+          const lineWidth = 2;
+          const lineHeight = ROW_HEIGHT;
+          const dotClass = d.selected
+            ? 'bg-cyan-400'
+            : isGroupHovered
+              ? 'bg-rose-400'
+              : 'bg-pink-500/50';
+          return (
+            <div
+              key={`tuplet-dot-${i}`}
+              className={`absolute rounded-full pointer-events-none ${dotClass}`}
+              style={{
+                left: d.centerX - lineWidth / 2,
+                top: d.centerY - lineHeight / 4,
+                width: lineWidth,
+                height: lineHeight/2,
+              }}
+            />
+          );
+        })}
         {dragGhost && dragState && (() => {
-          const selectedNotes = notes.filter((n) => n.selected);
-          if (selectedNotes.length === 0) return null;
-          const { anchorRow, anchorStartCol, anchorOffsetX, anchorOffsetY } = dragState;
+          const anchorNote = notes.find((n) => n.id === dragState.noteId);
+          const notesToMove = anchorNote?.rhythmGroupId
+            ? notes.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
+            : notes.filter((n) => n.selected);
+          if (notesToMove.length === 0) return null;
+          const { anchorRow, anchorVisualLeftPx, anchorOffsetX, anchorOffsetY } = dragState;
           const pad = NOTE_CHIP_PADDING_PX;
           return (
             <div
@@ -1749,26 +2184,25 @@ function StateTestGrid({
                 position: 'fixed',
               }}
             >
-              {selectedNotes.map((n) => {
-                const span = n.endCol - n.startCol + 1;
-                const ghostWidthPx = span * COLUMN_WIDTH - 2 * pad;
-                const slotsNum = Math.min(6, Math.max(1, span)) as 1 | 2 | 3 | 4 | 5 | 6;
+              {notesToMove.map((n) => {
+                const { leftPx, widthPx } = getNoteVisualBounds(n);
+                const ghostWidthPx = Math.max(0, widthPx - 2 * pad);
                 return (
                   <div
                     key={n.id}
                     className="absolute flex items-center justify-center"
                     style={{
-                      left: (n.startCol - anchorStartCol) * COLUMN_WIDTH,
+                      left: leftPx - anchorVisualLeftPx,
                       top: (n.row - anchorRow) * ROW_HEIGHT,
                       padding: `${pad}px`,
                       height: ROW_HEIGHT,
                       minHeight: ROW_HEIGHT,
-                      width: span * COLUMN_WIDTH,
+                      width: widthPx,
                     }}
                   >
                     <GridNoteChip
                       value={n.value}
-                      slots={slotsNum}
+                      slots={1}
                       widthPx={ghostWidthPx}
                       state="dragGhost"
                     />
@@ -1833,11 +2267,12 @@ export function Editor() {
     () => ({
       ...defaultRiff('grid-phase1', 'Phrase'),
       notes: gridNotesToRiffNotes(gridNotes, bars, subsPerBar),
+      rhythmGroups: riff?.rhythmGroups ?? [],
       lengthBars: bars,
       timeSignature,
       tempo: bpm,
     }),
-    [gridNotes, bpm, bars, subsPerBar, timeSignature]
+    [gridNotes, riff?.rhythmGroups, bpm, bars, subsPerBar, timeSignature]
   );
   const {
     onTick: playbackOnTick,
@@ -1857,7 +2292,7 @@ export function Editor() {
     const slotIndex = getActiveNoteIndex();
     const column = getCurrentColumn();
     if (column) {
-      const noteInfoPerString: ({ fret: number; duration: number; startSlot: number } | null)[] = [
+      const noteInfoPerString: { fret: number; duration: number; startSlot: number; onsetSlot?: number }[][] = [
         getNoteInfo(slotIndex, 0),
         getNoteInfo(slotIndex, 1),
         getNoteInfo(slotIndex, 2),
@@ -1865,9 +2300,12 @@ export function Editor() {
         getNoteInfo(slotIndex, 4),
         getNoteInfo(slotIndex, 5),
       ];
-      playColumnWithDuration(slotIndex, column, noteInfoPerString);
+      const slotDurationSec = timeSignature?.num != null && timeSignature.num > 0
+        ? 60 / (bpm * Math.max(1, Math.round(subsPerBar / timeSignature.num)))
+        : 60 / (bpm * 4);
+      playColumnWithDuration(slotIndex, column, noteInfoPerString, slotDurationSec);
     }
-  }, [isPlaying, playbackOnTick, getActiveNoteIndex, getCurrentColumn, getNoteInfo, playColumnWithDuration]);
+  }, [isPlaying, playbackOnTick, getActiveNoteIndex, getCurrentColumn, getNoteInfo, playColumnWithDuration, bpm, subsPerBar, timeSignature]);
   const handleBeat = useCallback(() => {}, []);
   const handleCountIn = useCallback(() => {}, []);
   const timeSignatureId = `${timeSignature.num}/${timeSignature.denom}`;
@@ -1960,10 +2398,38 @@ export function Editor() {
 
   const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useRiffHistory(riff ?? null);
 
-  const editorGrid = useMemo(
-    () => (riff ? notesToEditorGrid(riff, bars) : [] as ReturnType<typeof notesToEditorGrid>),
-    [riff, bars, riff?.notes]
-  );
+  // Build editor grid from gridNotes so it matches the displayed grid; selection and canApplyTuplet stay in sync.
+  const editorGrid = useMemo(() => {
+    if (!riff) return [] as ReturnType<typeof notesToEditorGrid>;
+    const notesFromGrid = gridNotesToRiffNotes(gridNotes, bars, subsPerBar);
+    const riffWithGridNotes = { ...riff, notes: notesFromGrid };
+    return notesToEditorGrid(riffWithGridNotes, bars);
+  }, [riff, gridNotes, bars, subsPerBar]);
+
+  // Enable triplet/sextuplet when selection touches exactly one note or one rhythm group.
+  // Use gridNotes so a tuplet group (multiple notes, one rhythmGroupId) counts as one.
+  const canApplyTuplet = useMemo(() => {
+    if (selection.size === 0) return false;
+    const overlappingNotes: StateTestNote[] = [];
+    for (const key of selection) {
+      const [sStr, slotStr] = key.split('-');
+      const s = Number(sStr);
+      const slot = Number(slotStr);
+      if (!Number.isFinite(s) || !Number.isFinite(slot)) continue;
+      for (const n of gridNotes) {
+        if (n.row !== s) continue;
+        if (slot >= n.startCol && slot <= n.endCol) {
+          overlappingNotes.push(n);
+          break;
+        }
+      }
+    }
+    if (overlappingNotes.length === 0) return false;
+    const logicalIds = new Set<string>(
+      overlappingNotes.map((n) => (n.rhythmGroupId != null && n.rhythmGroupId !== '' ? n.rhythmGroupId : n.id))
+    );
+    return logicalIds.size === 1;
+  }, [selection, gridNotes]);
 
   // Drag ghost follows the cursor while dragging notes or durations
   useEffect(() => {
@@ -2001,6 +2467,11 @@ export function Editor() {
           tempo: r.tempo ?? 100,
         };
         setRiffState(normalized);
+        const bars = normalized.lengthBars ?? 8;
+        const subs = getSubsPerBar(normalized);
+        setGridNotes(
+          gridNotesToStateTestNotes(riffNotesToGridNotes(normalized.notes ?? [], bars, subs))
+        );
       } else setRiffState(null);
     } else setRiffState(null);
     clearHistory();
@@ -2274,9 +2745,21 @@ export function Editor() {
   const handleCombineDuration = useCallback(() => {
     if (!riff || selection.size === 0) return;
     pushHistory(riff);
-    const newNotes = combineDurationInSelection(riff, riff.notes ?? [], selection);
-    setRiffState({ ...riff, notes: newNotes });
-  }, [riff, selection, pushHistory]);
+    const { notes: newNotes, addedGroup } = combineDurationInSelection(
+      riff,
+      riff.notes ?? [],
+      selection
+    );
+    const nextRiff: Riff = {
+      ...riff,
+      notes: newNotes,
+      rhythmGroups: [...(riff.rhythmGroups ?? []), ...(addedGroup ? [addedGroup] : [])],
+    };
+    setRiffState(nextRiff);
+    setGridNotes(
+      gridNotesToStateTestNotes(riffNotesToGridNotes(nextRiff.notes, bars, subsPerBar))
+    );
+  }, [riff, selection, pushHistory, bars, subsPerBar]);
 
   const handleSplitDuration = useCallback(() => {
     if (!riff || selection.size === 0) return;
@@ -2285,6 +2768,92 @@ export function Editor() {
     setRiffState({ ...riff, notes: newNotes });
     setSelection(new Set());
   }, [riff, selection, pushHistory]);
+
+  const handleMakeTriplet = useCallback(() => {
+    if (!riff || selection.size === 0) return;
+    let minSlot = Infinity;
+    const stringsInSelection = new Set<number>();
+    for (const key of selection) {
+      const [sStr, slotStr] = key.split('-');
+      const s = Number(sStr);
+      const slot = Number(slotStr);
+      if (!Number.isFinite(s) || !Number.isFinite(slot)) continue;
+      stringsInSelection.add(s);
+      minSlot = Math.min(minSlot, slot);
+    }
+    if (minSlot === Infinity || stringsInSelection.size === 0) return;
+    // Tuplet starts at selected note, spans 4 cells (one beat); can cross measures.
+    const startSlot = minSlot;
+    const endSlot = Math.min(minSlot + 3, totalColumns - 1);
+    const alignedCellKeys = new Set<string>();
+    for (const s of stringsInSelection) {
+      for (let slot = startSlot; slot <= endSlot; slot++) alignedCellKeys.add(cellKey(s, slot));
+    }
+    pushHistory(riff);
+    const baseNotes = gridNotesToRiffNotes(gridNotes, bars, subsPerBar);
+    const baseRiff = { ...riff, notes: baseNotes };
+    const { notes: newNotes, addedGroup } = makeTupletInSelection(
+      baseRiff,
+      baseRiff.notes,
+      alignedCellKeys,
+      { n: 3, d: 4 }
+    );
+    if (!addedGroup) return;
+    const nextRiff: Riff = {
+      ...riff,
+      notes: newNotes,
+      rhythmGroups: [...(riff.rhythmGroups ?? []), addedGroup],
+    };
+    setRiffState(nextRiff);
+    setGridNotes(
+      gridNotesToStateTestNotes(riffNotesToGridNotes(nextRiff.notes, bars, subsPerBar))
+    );
+  }, [riff, gridNotes, selection, pushHistory, bars, subsPerBar, totalColumns]);
+
+  const handleMakeSextuplet = useCallback(() => {
+    if (!riff || selection.size === 0) return;
+    let minSlot = Infinity;
+    const stringsInSelection = new Set<number>();
+    for (const key of selection) {
+      const [sStr, slotStr] = key.split('-');
+      const s = Number(sStr);
+      const slot = Number(slotStr);
+      if (!Number.isFinite(s) || !Number.isFinite(slot)) continue;
+      stringsInSelection.add(s);
+      minSlot = Math.min(minSlot, slot);
+    }
+    if (minSlot === Infinity || stringsInSelection.size === 0) return;
+    // Tuplet starts at selected note, spans 4 cells (one beat); can cross measures.
+    const startSlot = minSlot;
+    const endSlot = Math.min(minSlot + 3, totalColumns - 1);
+    const alignedCellKeys = new Set<string>();
+    for (const s of stringsInSelection) {
+      for (let slot = startSlot; slot <= endSlot; slot++) alignedCellKeys.add(cellKey(s, slot));
+    }
+    pushHistory(riff);
+    const baseNotes = gridNotesToRiffNotes(gridNotes, bars, subsPerBar);
+    const baseRiff = { ...riff, notes: baseNotes };
+    const { notes: newNotes, addedGroup } = makeTupletInSelection(
+      baseRiff,
+      baseRiff.notes,
+      alignedCellKeys,
+      { n: 6, d: 4 }
+    );
+    if (!addedGroup) return;
+    const nextRiff: Riff = {
+      ...riff,
+      notes: newNotes,
+      rhythmGroups: [...(riff.rhythmGroups ?? []), addedGroup],
+    };
+    setRiffState(nextRiff);
+    setGridNotes(
+      gridNotesToStateTestNotes(riffNotesToGridNotes(nextRiff.notes, bars, subsPerBar))
+    );
+  }, [riff, gridNotes, selection, pushHistory, bars, subsPerBar, totalColumns]);
+
+  const handlePasteRhythmGroup = useCallback((group: RhythmGroup) => {
+    setRiffState((r) => (r ? { ...r, rhythmGroups: [...(r.rhythmGroups ?? []), group] } : r));
+  }, []);
 
   const handleCombineChord = useCallback(() => {
     setChordCells((prev) => new Set([...prev, ...selection]));
@@ -2314,6 +2883,12 @@ export function Editor() {
       const active = document.activeElement;
       if (active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA' || active?.tagName === 'SELECT') return;
       if (selection.size === 0) return;
+
+      if (e.key === 't') {
+        e.preventDefault();
+        handleMakeTriplet();
+        return;
+      }
 
       // Determine which cell should receive numeric edits:
       // - If a single cell is selected, use that cell.
@@ -2475,7 +3050,7 @@ export function Editor() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [riff, selection, handleCellEdit, pushHistory, totalColumns, editorGrid]);
+  }, [riff, selection, handleCellEdit, pushHistory, totalColumns, editorGrid, handleMakeTriplet]);
 
   if (!riff) {
     return (
@@ -2552,10 +3127,16 @@ export function Editor() {
               stringLabels={getStringLabels(STANDARD_TUNING)}
               notes={gridNotes}
               onNotesChange={(updater) => setGridNotes((prev) => updater(prev))}
+              rhythmGroups={riff?.rhythmGroups ?? []}
+              selection={selection}
+              onSelectionChange={setSelection}
+              canApplyTuplet={canApplyTuplet}
+              onMakeTriplet={handleMakeTriplet}
+              onMakeSextuplet={handleMakeSextuplet}
               activeColumnIndex={isPlaying ? smoothColumn : -1}
               scrollContainerRef={gridScrollContainerRef}
+              onPasteRhythmGroup={handlePasteRhythmGroup}
             />
-            
           </div>
         </div>
       </main>
