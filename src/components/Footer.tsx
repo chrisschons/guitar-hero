@@ -124,15 +124,14 @@ export function Footer({
                 {isPlaying ? (
                   <>
                     <Pause size={18} />
-                    <span>Pause</span>
                   </>
                 ) : (
                   <>
                     <Play size={18} />
-                    <span>Play</span>
                   </>
                 )}
               </button>
+              
             </>
           )}
         </div>
@@ -176,6 +175,7 @@ export function Footer({
             <SlidersHorizontal />
             Editor
           </a>
+            {/*}
           <a
             href="#/design-guide"
             className="text-accent hover:text-accent-light transition-colors flex flex-col items-center gap-1"
@@ -183,7 +183,7 @@ export function Footer({
             <Palette />
             Guide
           </a>
-          {/*}
+        
           <button
             onClick={toggleDarkMode}
             className="text-accent hover:text-accent-light transition-colors flex flex-col items-center gap-1"

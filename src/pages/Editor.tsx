@@ -499,6 +499,28 @@ function StateTestGrid({
   const expandSelectionWithChordMatesRef = useRef(expandSelectionWithChordMates);
   expandSelectionWithChordMatesRef.current = expandSelectionWithChordMates;
 
+  /** Expand a set of selected note ids to include full rhythm groups (tuplets, duration groups). */
+  const expandSelectionWithRhythmGroups = useCallback(
+    (noteList: StateTestNote[], selectedIds: Set<string>): Set<string> => {
+      const expanded = new Set(selectedIds);
+      // First collect all rhythmGroupIds that are touched by the current selection.
+      const groupIds = new Set<string>();
+      for (const n of noteList) {
+        if (!selectedIds.has(n.id)) continue;
+        if (n.rhythmGroupId) groupIds.add(n.rhythmGroupId);
+      }
+      if (groupIds.size === 0) return expanded;
+      // Add every note that belongs to any of those groups.
+      for (const n of noteList) {
+        if (n.rhythmGroupId && groupIds.has(n.rhythmGroupId)) {
+          expanded.add(n.id);
+        }
+      }
+      return expanded;
+    },
+    []
+  );
+
   const handleCopyRef = useRef<() => void>(() => {});
   const handleCutRef = useRef<() => void>(() => {});
   const handlePasteRef = useRef<() => void>(() => {});
@@ -606,7 +628,7 @@ function StateTestGrid({
     const newGroupId = rg ? `rg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` : null;
     applyMutation((prev) => {
       const pastedChordId = genChordId();
-      const newNotes: StateTestNote[] =
+      let newNotes: StateTestNote[] =
         rg != null && newGroupId != null
           ? (() => {
               const n = rg.tupletRatio.n;
@@ -644,9 +666,37 @@ function StateTestGrid({
                 endCol,
                 value: item.value,
                 selected: true,
-                chordId: pastedChordId,
+                // Treat pasted non-tuplet notes as independent notes, not a single chord group.
+                chordId: null,
               };
             });
+      // If any of the new notes would overlap a tuplet/rhythm-group note, disallow the drop entirely.
+      if (newNotes.length > 0) {
+        const protectedByRow = new Map<number, [number, number][]>();
+        for (const n of prev) {
+          if (!n.rhythmGroupId) continue;
+          const row = n.row;
+          if (!protectedByRow.has(row)) protectedByRow.set(row, []);
+          protectedByRow.get(row)!.push([n.startCol, n.endCol]);
+        }
+        for (const row of protectedByRow.keys()) {
+          protectedByRow.set(row, mergeColumnRanges(protectedByRow.get(row)!));
+        }
+        let hasTupletOverlap = false;
+        outer: for (const note of newNotes) {
+          const protectedIntervals = protectedByRow.get(note.row) ?? [];
+          for (const [ps, pe] of protectedIntervals) {
+            if (note.endCol >= ps && note.startCol <= pe) {
+              hasTupletOverlap = true;
+              break outer;
+            }
+          }
+        }
+        if (hasTupletOverlap) {
+          // Cancel paste/drag if it would land on any tuplet cells.
+          return prev;
+        }
+      }
       const dropFootprint = new Map<number, [number, number][]>();
       for (const n of newNotes) {
         const start = Math.max(0, n.startCol);
@@ -661,6 +711,32 @@ function StateTestGrid({
       const existing = prev.flatMap((n) => {
         if (!dropFootprint.has(n.row)) return [n];
         const dropRanges = dropFootprint.get(n.row)!;
+
+        // Tuplets / rhythm-group notes: only allow full replacement, never partial carve.
+        if (n.rhythmGroupId) {
+          // Determine if every column of this note is covered by some drop range.
+          let fullyCovered = true;
+          for (let c = n.startCol; c <= n.endCol; c += 1) {
+            let covered = false;
+            for (const [a, b] of dropRanges) {
+              if (c >= a && c <= b) {
+                covered = true;
+                break;
+              }
+            }
+            if (!covered) {
+              fullyCovered = false;
+              break;
+            }
+          }
+          // If not fully covered, leave tuplet note entirely unchanged.
+          if (!fullyCovered) return [n];
+          // Fully covered: allow removal.
+          if (n.chordId) brokenChordIds.add(n.chordId);
+          return [];
+        }
+
+        // Non-tuplet notes keep existing drop-to-split behavior.
         let intervals: [number, number][] = [[n.startCol, n.endCol]];
         for (const hole of dropRanges) {
           intervals = subtractRangeFromIntervals(intervals, hole);
@@ -710,6 +786,8 @@ function StateTestGrid({
   const handleSplitIntoNotes = useCallback(() => {
     const selected = notes.filter((n) => n.selected);
     if (selected.length === 0) return;
+    // Do not allow splitting notes that belong to tuplets or other rhythm groups.
+    if (selected.some((n) => n.rhythmGroupId)) return;
     const hasSpanning = selected.some((n) => n.startCol < n.endCol);
     if (!hasSpanning) return;
     applyMutation((prev) =>
@@ -733,6 +811,8 @@ function StateTestGrid({
   const handleCombineIntoChord = useCallback(() => {
     const selected = notes.filter((n) => n.selected);
     if (selected.length < 2) return;
+    // Do not allow combining notes that belong to tuplets or other rhythm groups.
+    if (selected.some((n) => n.rhythmGroupId)) return;
     applyMutation((prev) => {
       const selectedIds = new Set(selected.map((n) => n.id));
       const minStart = Math.min(...selected.map((n) => n.startCol));
@@ -779,6 +859,8 @@ function StateTestGrid({
     [notes]
   );
 
+  // Drop preview always shows; tuplets are protected in drop handlers themselves.
+
   const handleCellClick = useCallback(
     (row: number, col: number, e: React.MouseEvent) => {
       const note = findNoteAt(row, col);
@@ -793,14 +875,21 @@ function StateTestGrid({
       if (e.shiftKey) {
         onNotesChange((prev) => {
           const currentIds = new Set(prev.filter((n) => n.selected).map((n) => n.id));
-          const expanded = expandSelectionWithChordMates(prev, currentIds);
+          // Expand current selection to include chord mates and rhythm groups.
+          const withChords = expandSelectionWithChordMates(prev, currentIds);
+          const expanded = expandSelectionWithRhythmGroups(prev, withChords);
           const noteInSelection = expanded.has(note.id);
           const chordMateIds = note.chordId
             ? prev.filter((n) => n.chordId === note.chordId).map((n) => n.id)
             : [note.id];
+          const groupIds =
+            note.rhythmGroupId != null && note.rhythmGroupId !== ''
+              ? prev.filter((n) => n.rhythmGroupId === note.rhythmGroupId).map((n) => n.id)
+              : [];
+          const idsForToggle = new Set([...chordMateIds, ...groupIds]);
           const nextIds = new Set(expanded);
-          if (noteInSelection) chordMateIds.forEach((id) => nextIds.delete(id));
-          else chordMateIds.forEach((id) => nextIds.add(id));
+          if (noteInSelection) idsForToggle.forEach((id) => nextIds.delete(id));
+          else idsForToggle.forEach((id) => nextIds.add(id));
           return prev.map((n) => ({ ...n, selected: nextIds.has(n.id) }));
         });
         digitBufferRef.current = '';
@@ -818,7 +907,8 @@ function StateTestGrid({
       } else {
         onNotesChange((prev) => {
           const primaryIds = new Set([note.id]);
-          const expanded = expandSelectionWithChordMates(prev, primaryIds);
+          const withChords = expandSelectionWithChordMates(prev, primaryIds);
+          const expanded = expandSelectionWithRhythmGroups(prev, withChords);
           return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
         });
       }
@@ -838,19 +928,26 @@ function StateTestGrid({
     if (e.shiftKey) {
       onNotesChange((prev) => {
         const currentIds = new Set(prev.filter((n) => n.selected).map((n) => n.id));
-        const expanded = expandSelectionWithChordMates(prev, currentIds);
+        const withChords = expandSelectionWithChordMates(prev, currentIds);
+        const expanded = expandSelectionWithRhythmGroups(prev, withChords);
         const chordMateIds = note.chordId
           ? prev.filter((n) => n.chordId === note.chordId).map((n) => n.id)
           : [note.id];
+        const groupIds =
+          note.rhythmGroupId != null && note.rhythmGroupId !== ''
+            ? prev.filter((n) => n.rhythmGroupId === note.rhythmGroupId).map((n) => n.id)
+            : [];
+        const idsForToggle = new Set([...chordMateIds, ...groupIds]);
         const nextIds = new Set(expanded);
-        if (expanded.has(note.id)) chordMateIds.forEach((id) => nextIds.delete(id));
-        else chordMateIds.forEach((id) => nextIds.add(id));
+        if (expanded.has(note.id)) idsForToggle.forEach((id) => nextIds.delete(id));
+        else idsForToggle.forEach((id) => nextIds.add(id));
         return prev.map((n) => ({ ...n, selected: nextIds.has(n.id) }));
       });
     } else if (!note.selected) {
       onNotesChange((prev) => {
         const primaryIds = new Set([note.id]);
-        const expanded = expandSelectionWithChordMates(prev, primaryIds);
+        const withChords = expandSelectionWithChordMates(prev, primaryIds);
+        const expanded = expandSelectionWithRhythmGroups(prev, withChords);
         return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
       });
     }
@@ -976,7 +1073,9 @@ function StateTestGrid({
                 )
                 .map((n) => n.id)
             );
-            const expanded = expandSelectionWithChordMatesRef.current(prev, intersectsIds);
+            // First expand to include chord mates, then expand to include full rhythm groups (tuplets).
+            const withChords = expandSelectionWithChordMatesRef.current(prev, intersectsIds);
+            const expanded = expandSelectionWithRhythmGroups(prev, withChords);
             return prev.map((n) => ({ ...n, selected: expanded.has(n.id) }));
           });
           setMarqueeState((prev) =>
@@ -1000,10 +1099,13 @@ function StateTestGrid({
           const row = Math.floor(cursorLocalY / ROW_HEIGHT);
           let desiredRow = Math.max(0, Math.min(TEST_ROWS - 1, row));
           const anchorNote = notesRef.current.find((n) => n.id === dragState.noteId);
+          const selectedNow = notesRef.current.filter((n) => n.selected);
           const notesToMove =
-            anchorNote?.rhythmGroupId
+            selectedNow.length > 1
+              ? selectedNow
+              : anchorNote?.rhythmGroupId
               ? notesRef.current.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
-              : notesRef.current.filter((n) => n.selected);
+              : selectedNow;
           let desiredCol = Math.max(0, Math.min(totalColumns - 1, col));
           const note = notesRef.current.find((n) => n.id === dragState.noteId);
           const isFullHeightChord =
@@ -1191,10 +1293,13 @@ function StateTestGrid({
         setDragGhost(null);
         const { anchorRow, anchorCol } = dragState;
         const anchorNote = notesRef.current.find((n) => n.id === dragState.noteId);
+        const selectedNow = notesRef.current.filter((n) => n.selected);
         const notesToMove =
-          anchorNote?.rhythmGroupId
+          selectedNow.length > 1
+            ? selectedNow
+            : anchorNote?.rhythmGroupId
             ? notesRef.current.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
-            : notesRef.current.filter((n) => n.selected);
+            : selectedNow;
         const notesToMoveIds = new Set(notesToMove.map((n) => n.id));
         const bounds = getDragDeltaBounds(notesToMove, totalColumns, TEST_ROWS);
         let deltaRow = Math.max(bounds.deltaRowMin, Math.min(bounds.deltaRowMax, dragState.currentRow - anchorRow));
@@ -1251,6 +1356,30 @@ function StateTestGrid({
           for (const row of dropFootprint.keys()) {
             dropFootprint.set(row, mergeColumnRanges(dropFootprint.get(row)!));
           }
+
+          // Disallow dropping moved notes onto any tuplet/rhythm-group cells (no partial or full replacement).
+          let hasTupletOverlap = false;
+          outerDropCheck: for (const [row, ranges] of dropFootprint.entries()) {
+            for (const n of prev) {
+              if (!n.rhythmGroupId || n.row !== row) continue;
+              for (const [a, b] of ranges) {
+                if (n.endCol >= a && n.startCol <= b) {
+                  hasTupletOverlap = true;
+                  break outerDropCheck;
+                }
+              }
+            }
+          }
+          if (hasTupletOverlap) {
+            // Cancel the drag: leave all notes (including tuplets) unchanged and clear selection.
+            onNotesChange((prevNotes) =>
+              prevNotes.map((n) => ({ ...n, selected: false }))
+            );
+            setSelectedCellRef.current(null);
+            setDragState(null);
+            return;
+          }
+
           const brokenChordIds = new Set<string>();
           const result = prev.flatMap((n) => {
             if (notesToMoveIds.has(n.id)) {
@@ -1276,6 +1405,28 @@ function StateTestGrid({
             }
             if (!dropFootprint.has(n.row)) return [n];
             const dropRanges = dropFootprint.get(n.row)!;
+            // For tuplets / rhythm-group notes, disallow any partial carve by drag-drop.
+            if (n.rhythmGroupId) {
+              // If *every* column of this note is covered by some drop range, allow full removal.
+              // Otherwise, leave the note completely unchanged.
+              let fullyCovered = true;
+              for (let c = n.startCol; c <= n.endCol; c += 1) {
+                let covered = false;
+                for (const [a, b] of dropRanges) {
+                  if (c >= a && c <= b) {
+                    covered = true;
+                    break;
+                  }
+                }
+                if (!covered) {
+                  fullyCovered = false;
+                  break;
+                }
+              }
+              if (!fullyCovered) return [n];
+              if (n.chordId) brokenChordIds.add(n.chordId);
+              return [];
+            }
             let intervals: [number, number][] = [[n.startCol, n.endCol]];
             for (const hole of dropRanges) {
               intervals = subtractRangeFromIntervals(intervals, hole);
@@ -1410,7 +1561,16 @@ function StateTestGrid({
         e.preventDefault();
         if (e.repeat) return;
         applyMutationRef.current((prev) => {
-          const selected = prev.filter((n) => n.selected);
+          let selected = prev.filter((n) => n.selected);
+          // If nothing is selected yet, but a cell is active, treat +/- as acting on the note under that cell.
+          if (selected.length === 0 && selectedCellRef.current) {
+            const { row, col } = selectedCellRef.current;
+            const noteAt =
+              prev.find((n) => n.row === row && col >= n.startCol && col <= n.endCol) ?? null;
+            if (noteAt) {
+              selected = [noteAt];
+            }
+          }
           if (selected.length === 0) return prev;
           const expandedIds = expandSelectionWithChordMatesRef.current(
             prev,
@@ -1428,7 +1588,16 @@ function StateTestGrid({
         e.preventDefault();
         if (e.repeat) return;
         applyMutationRef.current((prev) => {
-          const selected = prev.filter((n) => n.selected);
+          let selected = prev.filter((n) => n.selected);
+          // If nothing is selected yet, but a cell is active, treat +/- as acting on the note under that cell.
+          if (selected.length === 0 && selectedCellRef.current) {
+            const { row, col } = selectedCellRef.current;
+            const noteAt =
+              prev.find((n) => n.row === row && col >= n.startCol && col <= n.endCol) ?? null;
+            if (noteAt) {
+              selected = [noteAt];
+            }
+          }
           if (selected.length === 0) return prev;
           const expandedIds = expandSelectionWithChordMatesRef.current(
             prev,
@@ -1545,7 +1714,7 @@ function StateTestGrid({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [totalColumns]);
 
   // Cursor during resize (col-resize), drag (grabbing), and marquee (crosshair); use !important so it overrides child cursor styles
   useEffect(() => {
@@ -2072,9 +2241,13 @@ function StateTestGrid({
         })}
         {dragGhost && dragState && (() => {
           const anchorNote = notes.find((n) => n.id === dragState.noteId);
-          const notesToMove = anchorNote?.rhythmGroupId
-            ? notes.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
-            : notes.filter((n) => n.selected);
+          const selectedNow = notes.filter((n) => n.selected);
+          const notesToMove =
+            selectedNow.length > 1
+              ? selectedNow
+              : anchorNote?.rhythmGroupId
+              ? notes.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
+              : selectedNow;
           if (notesToMove.length === 0) return null;
           const { anchorRow, anchorVisualLeftPx, anchorOffsetX, anchorOffsetY } = dragState;
           const pad = NOTE_CHIP_PADDING_PX;
@@ -2182,7 +2355,11 @@ function StateTestGrid({
           type="button"
           variant="secondary"
           onClick={handleCombineIntoChord}
-          disabled={notes.filter((n) => n.selected).length < 2}
+          disabled={
+            // Need at least 2 selected notes and none may belong to a rhythm group (e.g. tuplets)
+            notes.filter((n) => n.selected).length < 2 ||
+            notes.some((n) => n.selected && n.rhythmGroupId)
+          }
           title="Combine into chord"
           aria-label="Combine into chord"
           size="lg"
@@ -2193,7 +2370,11 @@ function StateTestGrid({
           type="button" 
           variant="secondary"
           onClick={handleSplitIntoNotes}
-          disabled={!notes.some((n) => n.selected && n.startCol < n.endCol)}
+          disabled={
+            // Require at least one spanning note selected and disallow any rhythm-group notes.
+            !notes.some((n) => n.selected && n.startCol < n.endCol) ||
+            notes.some((n) => n.selected && n.rhythmGroupId)
+          }
           title="Split into notes"
           aria-label="Split into notes"
           size="lg"
@@ -2443,17 +2624,30 @@ export function Editor() {
     if (!isPlaying) stopAllSustained();
   }, [isPlaying, stopAllSustained]);
 
-  // Clamp grid notes when bars or time signature reduces totalColumns
   useEffect(() => {
-    setGridNotes((prev) =>
-      prev
-        .map((n) => ({
-          ...n,
-          startCol: Math.min(n.startCol, totalColumns - 1),
-          endCol: Math.min(n.endCol, totalColumns - 1),
-        }))
-        .filter((n) => n.startCol <= n.endCol)
-    );
+    // When totalColumns shrinks (e.g. bars/time signature change), apply a stricter rule:
+    // - Notes fully beyond the new last column are removed.
+    // - Notes that overlap the new end are truncated so endCol === lastCol, but startCol is preserved.
+    // - Notes fully inside the new range are left untouched.
+    setGridNotes((prev) => {
+      const lastCol = Math.max(0, totalColumns - 1);
+      return prev
+        .map((n) => {
+          // Drop notes that start entirely after the new last column
+          if (n.startCol > lastCol) {
+            return null;
+          }
+          const clampedEndCol = Math.min(n.endCol, lastCol);
+          if (clampedEndCol < n.startCol) {
+            return null;
+          }
+          return {
+            ...n,
+            endCol: clampedEndCol,
+          };
+        })
+        .filter((n): n is StateTestNote => n !== null);
+    });
   }, [totalColumns]);
 
   const PLAYHEAD_OFFSET_PX = 80;
