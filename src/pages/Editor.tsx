@@ -859,6 +859,63 @@ function StateTestGrid({
     [notes]
   );
 
+  // Whether the current drag position would drop onto any tuplet / rhythm-group cells.
+  const isInvalidDropPreview = useMemo(() => {
+    if (!dragState) return false;
+    const anchorNote = notes.find((n) => n.id === dragState.noteId);
+    if (!anchorNote) return false;
+    const selectedNow = notes.filter((n) => n.selected);
+    const notesToMove =
+      selectedNow.length > 0
+        ? selectedNow
+        : anchorNote.rhythmGroupId
+        ? notes.filter((n) => n.rhythmGroupId === anchorNote.rhythmGroupId)
+        : [anchorNote];
+    if (notesToMove.length === 0) return false;
+    const deltaRow = dragState.currentRow - dragState.anchorRow;
+    const deltaCol = dragState.currentCol - dragState.anchorCol;
+    if (deltaRow === 0 && deltaCol === 0) return false;
+
+    const dropFootprint = new Map<number, [number, number][]>();
+    for (const n of notesToMove) {
+      const newRow = Math.max(0, Math.min(TEST_ROWS - 1, n.row + deltaRow));
+      const newStartCol = Math.max(
+        0,
+        Math.min(totalColumns - 1, n.startCol + deltaCol)
+      );
+      const span = n.endCol - n.startCol + 1;
+      const newEndCol = Math.max(
+        newStartCol,
+        Math.min(totalColumns - 1, newStartCol + span - 1)
+      );
+      if (!dropFootprint.has(newRow)) dropFootprint.set(newRow, []);
+      dropFootprint.get(newRow)!.push([newStartCol, newEndCol]);
+    }
+    for (const row of dropFootprint.keys()) {
+      dropFootprint.set(row, mergeColumnRanges(dropFootprint.get(row)!));
+    }
+
+    for (const [row, ranges] of dropFootprint.entries()) {
+      for (const n of notes) {
+        if (!n.rhythmGroupId || n.row !== row) continue;
+        for (const [a, b] of ranges) {
+          if (n.endCol >= a && n.startCol <= b) {
+            // Any overlap with a tuplet cell makes this drop disallowed.
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }, [dragState, notes, totalColumns]);
+
+  // Clear any residual hover when the current drag position becomes invalid for dropping.
+  useEffect(() => {
+    if (isInvalidDropPreview) {
+      setHover(null);
+    }
+  }, [isInvalidDropPreview]);
+
   // Drop preview always shows; tuplets are protected in drop handlers themselves.
 
   const handleCellClick = useCallback(
@@ -985,6 +1042,10 @@ function StateTestGrid({
   };
 
   const handleCellMouseEnter = (row: number, col: number) => {
+    // During disallowed drop positions, don't update hover from cell enter.
+    if (isInvalidDropPreview) {
+      return;
+    }
     setHover({ row, col });
     // During drag, drop cell is computed from anchor point in mousemove, not from cursor cell
     if (dragState) return;
@@ -1905,7 +1966,7 @@ function StateTestGrid({
         )}
 
         {/* Drop targets: for rhythm groups always one 4-cell beat; otherwise one per note */}
-        {dragState &&
+        {dragState && !isInvalidDropPreview &&
           dragState.currentRow >= 0 &&
           dragState.currentCol >= 0 &&
           (dragState.currentRow !== dragState.anchorRow ||
@@ -1994,7 +2055,7 @@ function StateTestGrid({
         >
           {Array.from({ length: TEST_ROWS }, (_, r) =>
             Array.from({ length: totalColumns }, (_, c) => {
-              const isHover = hover?.row === r && hover?.col === c;
+              const isHover = !isInvalidDropPreview && hover?.row === r && hover?.col === c;
               const hasNote = findNoteAt(r, c);
               const isSelectedEmpty =
                 !hasNote && selectedCell?.row === r && selectedCell?.col === c;
@@ -2045,7 +2106,10 @@ function StateTestGrid({
             dragState != null &&
             anchorNote?.rhythmGroupId != null &&
             note.rhythmGroupId === anchorNote.rhythmGroupId;
-          if (chordIsBeingDragged || groupIsBeingDragged) return null;
+          const isInMultiSelectionBeingDragged =
+            dragState != null &&
+            notes.some((n) => n.id === note.id && n.selected);
+          if (chordIsBeingDragged || groupIsBeingDragged || isInMultiSelectionBeingDragged) return null;
           const resizeNote = resizeState ? notes.find((n) => n.id === resizeState.noteId) : null;
           const isResizing =
             resizeState?.noteId === note.id ||
@@ -2078,7 +2142,7 @@ function StateTestGrid({
             }
           }
           const hoveredNote =
-            hover != null ? findNoteAt(hover.row, hover.col) : null;
+            hover != null && !isInvalidDropPreview ? findNoteAt(hover.row, hover.col) : null;
           const isChordHovered =
             hoveredNote != null &&
             (hoveredNote.chordId != null
@@ -2087,10 +2151,10 @@ function StateTestGrid({
           const chipState = isResizing
             ? 'resizing'
             : note.selected
-            ? isChordHovered && !isDragging
+            ? isChordHovered && !isDragging && !isInvalidDropPreview
               ? 'selectedHover'
               : 'selected'
-            : isChordHovered && !isDragging
+            : isChordHovered && !isDragging && !isInvalidDropPreview
             ? 'hover'
             : 'default';
 
@@ -2105,7 +2169,9 @@ function StateTestGrid({
                 top: note.row * ROW_HEIGHT,
                 width: widthPx,
                 height: ROW_HEIGHT,
-                pointerEvents: isDragging ? 'none' : 'auto',
+              // When dragging and the current drop is invalid, suppress pointer/hover behavior
+              // so chips don't show hover states under a disallowed drop.
+              pointerEvents: isDragging || isInvalidDropPreview ? 'none' : 'auto',
               }}
               onMouseEnter={() => setHover({ row: note.row, col: note.startCol })}
               onMouseLeave={() => setHover(null)}
@@ -2151,7 +2217,7 @@ function StateTestGrid({
         {/* Chord connector dots: centered on grid border between consecutive chord notes */}
         {(() => {
           const hoveredNote =
-            hover != null ? findNoteAt(hover.row, hover.col) : null;
+            hover != null && !isInvalidDropPreview ? findNoteAt(hover.row, hover.col) : null;
           const byChord = new Map<string, StateTestNote[]>();
           for (const n of notes) {
             if (!n.chordId) continue;
@@ -2215,7 +2281,21 @@ function StateTestGrid({
         {/* Tuplet connector: vertical line between consecutive notes in a group on the same row */}
         {tupletConnectorDots.map((d, i) => {
           const anchorNote = dragState != null ? notes.find((n) => n.id === dragState.noteId) : null;
-          if (dragState != null && anchorNote?.rhythmGroupId === d.rhythmGroupId) return null;
+          if (dragState != null) {
+            // Hide connector dots for any tuplet group that is currently being dragged
+            // (either as the anchor group or as part of the multi-selection).
+            const selectedGroupIds = new Set(
+              notes
+                .filter((n) => n.selected && n.rhythmGroupId)
+                .map((n) => n.rhythmGroupId as string)
+            );
+            if (
+              anchorNote?.rhythmGroupId === d.rhythmGroupId ||
+              selectedGroupIds.has(d.rhythmGroupId)
+            ) {
+              return null;
+            }
+          }
           const hoveredNote = hover != null ? findNoteAt(hover.row, hover.col) : null;
           const isGroupHovered =
             hoveredNote?.rhythmGroupId != null && hoveredNote.rhythmGroupId === d.rhythmGroupId;
