@@ -790,9 +790,35 @@ function StateTestGrid({
     if (selected.some((n) => n.rhythmGroupId)) return;
     const hasSpanning = selected.some((n) => n.startCol < n.endCol);
     if (!hasSpanning) return;
-    applyMutation((prev) =>
-      prev.flatMap((n) => {
-        if (!n.selected || n.startCol >= n.endCol) return [n];
+    applyMutation((prev) => {
+      // Spans we are about to split: used to clear overlapping notes first.
+      const spans = prev
+        .filter((n) => n.selected && n.startCol < n.endCol)
+        .map((n) => ({
+          row: n.row,
+          startCol: n.startCol,
+          endCol: n.endCol,
+          value: n.value,
+        }));
+
+      return prev.flatMap((n) => {
+        // For non-selected notes, drop any that overlap the span of a selected combined note
+        // on the same row with the same value, so we don't end up with duplicates after split.
+        if (!n.selected || n.startCol >= n.endCol) {
+          for (const span of spans) {
+            if (
+              n.row === span.row &&
+              n.value === span.value &&
+              n.startCol <= span.endCol &&
+              n.endCol >= span.startCol
+            ) {
+              return [];
+            }
+          }
+          return [n];
+        }
+
+        // Split the selected combined note into one single-slot note per column.
         return Array.from(
           { length: n.endCol - n.startCol + 1 },
           (_, i) => ({
@@ -803,8 +829,8 @@ function StateTestGrid({
             chordId: null,
           })
         );
-      })
-    );
+      });
+    });
   }, [notes, applyMutation]);
   handleSplitIntoNotesRef.current = handleSplitIntoNotes;
 
@@ -1639,7 +1665,18 @@ function StateTestGrid({
           );
           return prev.map((n) => {
             if (!expandedIds.has(n.id)) return n;
-            const newEndCol = Math.min(totalColumns - 1, n.endCol + 1);
+            // Prevent duration growth from overlapping the next note on this row.
+            // Find the nearest later note on the same row and clamp to just before it.
+            let maxEnd = totalColumns - 1;
+            for (const other of prev) {
+              if (other.row !== n.row) continue;
+              if (other.id === n.id) continue;
+              if (other.startCol > n.endCol) {
+                // Candidate "next note" to the right
+                maxEnd = Math.min(maxEnd, other.startCol - 1);
+              }
+            }
+            const newEndCol = Math.min(maxEnd, n.endCol + 1);
             return { ...n, endCol: newEndCol };
           });
         });
