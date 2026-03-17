@@ -46,14 +46,21 @@ import {
   Maximize2,
   Minimize2,
   Trash2,
+  ListChevronsDownUp,
+  ListChevronsUpDown,
   Play,
   Pause,
   ArrowLeftToLine,
   Metronome,
+  SquareCenterlineDashedHorizontal,
+  LayersPlus,
   RotateCcw,
 } from 'lucide-react';
 import { Slider } from '../components/ui/Slider';
 import { Switch } from '../components/ui/Switch';
+import { Button } from '../components/ui/button';
+import {Kbd, KbdGroup} from '../components/ui/kbd';
+import { ButtonGroup } from '../components/ui/button-group';
 import { Footer } from '../components/Footer';
 const COLUMN_WIDTH = 68;
 const ROW_HEIGHT = 32;
@@ -1564,120 +1571,16 @@ function StateTestGrid({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 w-full">
-      <div className="shrink-0 flex flex-wrap items-center gap-1 mb-2">
-        <button
-          type="button"
-          onClick={handleUndo}
-          disabled={undoStack.length === 0}
-          title="Undo"
-          aria-label="Undo"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
-        >
-          <Undo2 className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={handleRedo}
-          disabled={redoStack.length === 0}
-          title="Redo"
-          aria-label="Redo"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
-        >
-          <Redo2 className="w-4 h-4" />
-        </button>
-        <span className="w-px h-4 bg-bg-tertiary" aria-hidden />
-        <button
-          type="button"
-          onClick={handleCopy}
-          disabled={!notes.some((n) => n.selected)}
-          title="Copy"
-          aria-label="Copy"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
-        >
-          <Copy className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={handleCut}
-          disabled={!notes.some((n) => n.selected)}
-          title="Cut"
-          aria-label="Cut"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
-        >
-          <Scissors className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={handlePaste}
-          disabled={!clipboard?.items?.length}
-          title="Paste"
-          aria-label="Paste"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
-        >
-          <ClipboardPaste className="w-4 h-4" />
-        </button>
-        <span className="w-px h-4 bg-bg-tertiary" aria-hidden />
-        <button
-          type="button"
-          onClick={handleSplitIntoNotes}
-          disabled={!notes.some((n) => n.selected && n.startCol < n.endCol)}
-          title="Split into notes"
-          aria-label="Split into notes"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
-        >
-          <Maximize2 className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={handleCombineIntoChord}
-          disabled={notes.filter((n) => n.selected).length < 2}
-          title="Combine into chord"
-          aria-label="Combine into chord"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary"
-        >
-          <Minimize2 className="w-4 h-4" />
-        </button>
-        <span className="w-px h-4 bg-bg-tertiary" aria-hidden />
-        <button
-          type="button"
-          onClick={onMakeTriplet}
-          disabled={!canApplyTuplet || !onMakeTriplet}
-          title="Make triplet (3 in 4)"
-          aria-label="Make triplet"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary font-semibold text-sm w-8"
-        >
-          3
-        </button>
-        <button
-          type="button"
-          onClick={onMakeSextuplet}
-          disabled={!canApplyTuplet || !onMakeSextuplet}
-          title="Make sextuplet (6 in 4)"
-          aria-label="Make sextuplet"
-          className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-50 text-text-primary font-semibold text-sm w-8"
-        >
-          6
-        </button>
-        <button
-          type="button"
-          onClick={handleClearAll}
-          disabled={notes.length === 0}
-          title="Clear all"
-          aria-label="Clear all"
-          className="p-2 rounded border border-bg-tertiary/70 text-text-secondary hover:bg-bg-tertiary/80 hover:text-text-primary disabled:opacity-50"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
+    
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-      <div className="flex-1 min-h-0 rounded-lg border border-bg-tertiary p-4 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden ">
       <div
-        className="flex shrink-0"
+        className="flex shrink-0 border-b-4 border-bg-tertiary/60"
         style={{ height: GRID_FIXED_HEIGHT + GRID_SCROLLBAR_GAP }}
       >
         {/* Left: time signature + string labels (fixed, no horizontal scroll) */}
         <div
-          className="shrink-0 flex flex-col border-r border-bg-tertiary/60 pr-2 justify-start"
+          className="shrink-0 flex flex-col border-r-6 border-bg-tertiary/60 pr-2 justify-start"
           style={{ width: STRING_LABEL_WIDTH }}
         >
           <div
@@ -1719,7 +1622,7 @@ function StateTestGrid({
                 return (
                   <div
                     key={i}
-                    className="relative flex items-center justify-start text-text-secondary text-md font-medium border-l border-bg-tertiary/60 first:border-l-0"
+                    className="relative flex items-center justify-start text-text-secondary text-md font-medium border-l-2 border-bg-tertiary/60 first:border-l-0"
                     style={{ width: span * COLUMN_WIDTH, minWidth: span * COLUMN_WIDTH }}
                   >
                     {/* Beat lines within the bar (lighter than bar boundary) */}
@@ -1730,7 +1633,7 @@ function StateTestGrid({
                         return (
                           <div
                             key={b}
-                            className="absolute top-0 bottom-0 border-l border-text-secondary/25 pointer-events-none"
+                            className="absolute top-0 bottom-0 border-l-3 border-text-secondary/25 pointer-events-none"
                             style={{ left: beatCol * COLUMN_WIDTH }}
                             aria-hidden
                           />
@@ -1820,7 +1723,7 @@ function StateTestGrid({
           Array.from({ length: totalColumns + 1 }, (_, c) => (
             <div
               key={`dot-${r}-${c}`}
-              className="absolute rounded-full bg-bg-tertiary/70"
+              className="absolute rounded-full bg-bg-tertiary/80"
               style={{
                 width: 4,
                 height: 4,
@@ -2216,6 +2119,202 @@ function StateTestGrid({
           </div>
         </div>
       </div>
+      <div className="shrink-0 flex flex-wrap items-center gap-1 mt-2 p-4 mx-auto">
+        <Button
+          type="button"
+          onClick={handleUndo}
+          disabled={undoStack.length === 0}
+          title="Undo"
+          aria-label="Undo"
+          size="lg"
+          className="rounded-full"
+        >
+          <Undo2 className="w-4 h-4" />
+        </Button>
+        <Button
+          type="button"
+          onClick={handleRedo}
+          disabled={redoStack.length === 0}
+          title="Redo"
+          aria-label="Redo"
+          size="lg"
+          className="rounded-full"
+
+        >
+          <Redo2 className="w-4 h-4" />
+        </Button>
+        <ButtonGroup aria-label="Button group">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleCopy}
+          disabled={!notes.some((n) => n.selected)}
+          title="Copy"
+          aria-label="Copy"
+          size="lg"
+        >
+          <Copy className="w-4 h-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleCut}
+          disabled={!notes.some((n) => n.selected)}
+          title="Cut"
+          aria-label="Cut"
+          size="lg"
+        >
+          <Scissors className="w-4 h-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handlePaste}
+          disabled={!clipboard?.items?.length}
+          title="Paste"
+          aria-label="Paste"
+          size="lg"
+        >
+          <ClipboardPaste className="w-4 h-4" />
+        </Button>
+        </ButtonGroup>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleCombineIntoChord}
+          disabled={notes.filter((n) => n.selected).length < 2}
+          title="Combine into chord"
+          aria-label="Combine into chord"
+          size="lg"
+        >
+          <ListChevronsDownUp className="w-4 h-4" />
+        </Button>
+        <Button
+          type="button" 
+          variant="secondary"
+          onClick={handleSplitIntoNotes}
+          disabled={!notes.some((n) => n.selected && n.startCol < n.endCol)}
+          title="Split into notes"
+          aria-label="Split into notes"
+          size="lg"
+        >
+          <SquareCenterlineDashedHorizontal className="w-4 h-4" />
+        </Button>
+        <Button
+          type="button" 
+          variant="secondary"
+          onClick={onMakeTriplet}
+          disabled={!canApplyTuplet || !onMakeTriplet}
+          title="Make triplet (3 in 4)"
+          aria-label="Make triplet"
+          size="lg"
+        >
+          <svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M14.38 16.24V5.669" />
+  <path d="M7.25 17.79V7.5L21.5 3.84v10.29" />
+  <circle cx="12" cy="16.24" r="2.38" />
+  <circle cx="19.12" cy="14.13" r="2.38" />
+  <circle cx="4.88" cy="17.79" r="2.38" />
+</svg> Triplet
+            </Button>
+        <Button
+          type="button" 
+          variant="secondary"
+          onClick={onMakeSextuplet}
+          disabled={!canApplyTuplet || !onMakeSextuplet}
+          title="Make sextuplet (6 in 4)"
+          aria-label="Make sextuplet"
+          size="lg"
+        >
+          <svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+> 
+  <path d="M14.42 16.32V5.545" />
+  <path d="m7.16 10.95 14.52-3.73" />
+  <path d="M7.16 17.9V7.41l14.52-3.73v10.49" />
+  <circle cx="12" cy="16.32" r="2.42" />
+  <circle cx="19.26" cy="14.17" r="2.42" />
+  <circle cx="4.74" cy="17.9" r="2.42" />
+</svg> Sextuplet
+        </Button>
+        <Button
+          type="button"   
+          variant="secondary"
+          onClick={handleClearAll}
+          disabled={notes.length === 0}
+          title="Clear all"
+          aria-label="Clear all"
+          size="lg"
+          >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      
+      </div>
+      <div className="text-sm text-text-secondary max-w-3xl mx-auto"> 
+        <div className="grid grid-cols-4 gap-2">
+          <div className="col-span-2">
+            <ul>
+              <li>- click any cell an enter a note</li>
+              <li>- drag and drop to move</li>
+              <li>- shift click to select multiple notes</li>
+              <li>- drag a note to resize notes</li>
+              <li>- drag to select notes</li>
+            </ul>
+          </div>
+          <div> 
+          <p className="text-sm">
+            <Kbd>⌘ + Z</Kbd>
+          to undo
+        </p>
+        <p className="text-sm">
+        <KbdGroup>
+        <Kbd>⌘</Kbd>
+        <span>+</span>
+        <Kbd>C</Kbd> to copy
+      </KbdGroup>
+        </p>
+            <ul>
+              <li>cmd Z - to undo</li>
+              <li>cmd shift Z - to redo</li>
+              <li>cmd c - to copy</li>
+              <li>cmd v - to paste</li>
+              <li>cmd x - to cut</li>
+            </ul>
+          </div>
+          <div>
+          <p className="text-sm">
+           <KbdGroup>
+        <Kbd>+</Kbd>
+        <Kbd>-</Kbd> change duration
+        </KbdGroup>
+        </p>
+        C - to combine into chord
+        S - to split into notes
+      Delete - to delete
+            </div>
+        
+      
+      </div>
+        </div>
+
       </div>
       </div>
     </div>

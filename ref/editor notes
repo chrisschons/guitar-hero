@@ -1,2 +1,44 @@
-editor notes
-- add a minimap scroll area at bottom fixed, that wil be the scroll mechanism not dragging in editor/scroller area
+# Editor Notes
+
+## Features & Improvements
+
+### General
+- Need better demos, based on editor functionality not exercises
+- Add volume control (all pages)
+- Add stop button (all pages)
+- Refactor design tokens and core UI colors (notes, frets, etc.)
+
+### Grid Editor
+- Add more top/bottom padding
+- Allow marquee drag to start outside grid cells
+- Give more bottom space for scrollbar
+- Add support for X in cells
+- Add quick duplicate option
+- Add metronome visualization
+- More consistent Save UX with local storage
+
+### Scales
+- Change to selector button in footer
+- Add tabs for major/minor modes
+- Add regular scale, not just 3NPS
+
+### Chords
+- Make boxes bigger
+
+### Practice
+- Add ability to open riff in editor
+- Make changes and save as a copy
+
+### Tab Display
+- Add background color for numbers to hide string line
+
+### Navigation & UI
+- Add minimap with bars
+
+## Known Bugs
+
+- **Tuplets**: Don't paste correctly when in a group
+- **Tuplets**: Paste as all selected, cannot be individually selected or edited
+- **Audio**: Volume difference between notes and metronome
+- **Tuning**: Exercises don't adjust display based on tuning
+- **Audio**: Sound persists on loop sometimes

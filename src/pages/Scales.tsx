@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Footer } from '../components/Footer';
+import { Button } from '../components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
 import { PENTATONIC_POSITIONS, BLUES_POSITIONS } from '../data/exerciseTypes';
 import {
   C_MAJOR_3NPS_POSITIONS,
@@ -67,6 +69,7 @@ const A_MINOR_FULL_NOTES: [number, number][] = fullFretboardScaleNotes(
 
 export function Scales() {
   const [rootId, setRootId] = useLocalStorage('guitar-hero-debug-root', 'C');
+  const [scaleTab, setScaleTab] = useState<'major' | 'minor'>('major');
   const [showCanonicalMajor, setShowCanonicalMajor] = useState(false);
   const [showCanonicalMinor, setShowCanonicalMinor] = useState(false);
   const rootSemitone = ROOT_SEMITONES[rootId] ?? 0;
@@ -82,167 +85,166 @@ export function Scales() {
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary relative">
-      <header className="sticky top-0 z-20 w-full bg-bg-secondary border-b border-bg-tertiary shrink-0">
-        <div className="flex flex-wrap items-center gap-3 p-3">
-          <h1 className="text-lg font-semibold text-text-primary">Scales</h1>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-text-secondary">Key</span>
-            <select
-              value={rootId}
-              onChange={(e) => setRootId(e.target.value)}
-              className="bg-bg-tertiary border border-bg-tertiary rounded px-2 py-1.5 text-text-primary"
-            >
-              {NOTE_NAMES.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+      <header className="sticky top-0 z-20 w-full bg-bg-secondary border-b border-bg-tertiary">
+        <Tabs defaultValue="major" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'major' | 'minor')} className="w-full p-0">
+          <TabsList variant="line" className="w-full justify-start rounded-none gap-0 bg-transparent px-6">
+            <TabsTrigger value="major" className="py-3">Major Scale</TabsTrigger>
+            <TabsTrigger value="minor" className="py-3">Minor Scale</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </header>
 
       <div className="flex-1 p-6 pb-24 mx-auto w-full">
-        <section className="mb-4">
-          <button
-            type="button"
-            onClick={() => setShowCanonicalMajor((prev) => !prev)}
-            className="flex items-center justify-between w-full rounded-md border border-bg-tertiary bg-bg-secondary px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
-          >
-            <span className="font-semibold text-text-secondary">
-              C Major 3NPS — canonical positions (1–7)
-            </span>
-            <span className="text-xs text-text-secondary">
-              {showCanonicalMajor ? 'Hide' : 'Show'}
-            </span>
-          </button>
-          {showCanonicalMajor && (
-            <div className="mt-3 flex flex-wrap gap-3 justify-start">
-              {C_MAJOR_3NPS_POSITIONS.map((notes, idx) => (
-                <PositionDiagram
-                  key={idx}
-                  notes={notes}
-                  title={`Position ${idx + 1}`}
-                  rootSemitone={ROOT_SEMITONES.C ?? 0}
-                  showFretNumbers={false}
-                  showNoteLabels={false}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+        <Tabs defaultValue="major" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'major' | 'minor')} className="w-full">
+          {/* Major Scale Tab */}
+          <TabsContent value="major" className="space-y-8">
+            <section className="mb-4">
+              <button
+                type="button"
+                onClick={() => setShowCanonicalMajor((prev) => !prev)}
+                className="flex items-center justify-between w-full rounded-md border border-bg-tertiary bg-bg-secondary px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
+              >
+                <span className="font-semibold text-text-secondary">
+                  C Major 3NPS — canonical positions (1–7)
+                </span>
+                <span className="text-xs text-text-secondary">
+                  {showCanonicalMajor ? 'Hide' : 'Show'}
+                </span>
+              </button>
+              {showCanonicalMajor && (
+                <div className="mt-3 flex flex-wrap gap-3 justify-start">
+                  {C_MAJOR_3NPS_POSITIONS.map((notes, idx) => (
+                    <PositionDiagram
+                      key={idx}
+                      notes={notes}
+                      title={`Position ${idx + 1}`}
+                      rootSemitone={ROOT_SEMITONES.C ?? 0}
+                      showFretNumbers={false}
+                      showNoteLabels={false}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
 
-        <section className="mb-8">
-          <button
-            type="button"
-            onClick={() => setShowCanonicalMinor((prev) => !prev)}
-            className="flex items-center justify-between w-full rounded-md border border-bg-tertiary bg-bg-secondary px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
-          >
-            <span className="font-semibold text-text-secondary">
-              C Natural Minor 3NPS — canonical positions (1–7)
-            </span>
-            <span className="text-xs text-text-secondary">
-              {showCanonicalMinor ? 'Hide' : 'Show'}
-            </span>
-          </button>
-          {showCanonicalMinor && (
-            <div className="mt-3 flex flex-wrap gap-3 justify-start">
-              {getMinor3NPSPositions(ROOT_SEMITONES.C ?? 0).map((notes, idx) => (
+            <section className="mb-10">
+              <h2 className="text-xl font-semibold text-text-primary mb-3">
+                {rootId} Major 3NPS
+              </h2>
+             
+              <p className="text-xs text-text-secondary mb-2">
+                Full fretboard, then positions ordered by lowest fret (closest to nut first). Root
+                highlighted. Labels remain canonical (Position 1–7).
+              </p>
+              <div className="mb-4">
                 <PositionDiagram
-                  key={idx}
-                  notes={notes}
-                  title={`Position ${idx + 1}`}
-                  rootSemitone={ROOT_SEMITONES.C ?? 0}
-                  showFretNumbers={false}
-                  showNoteLabels={false}
+                  notes={majorFullNotes}
+                  title={`${rootId} major 3NPS — full fretboard`}
+                  fullScale
+                  rootSemitone={rootSemitone}
                 />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-text-primary mb-3">
-            {rootId} Major 3NPS
-          </h2>
-         
-          <p className="text-xs text-text-secondary mb-2">
-            Full fretboard, then positions ordered by lowest fret (closest to nut first). Root
-            highlighted. Labels remain canonical (Position 1–7).
-          </p>
-          <div className="mb-4">
-            <PositionDiagram
-              notes={majorFullNotes}
-              title={`${rootId} major 3NPS — full fretboard`}
-              fullScale
-              rootSemitone={rootSemitone}
-            />
-          </div>
-          <div className="mb-4">
-            <PositionDiagram
-              notes={majorFirstSevenNotes}
-              extraNotes={majorFullNotes}
-              title={`${rootId} major 3NPS — positions 1–7 (neutral shapes)`}
-              fullScale
-              rootSemitone={rootSemitone}
-            />
-          </div>
-          <div className="flex flex-wrap gap-4 justify-start">
-            {majorPositions.map((notes, idx) => {
-              const canonicalIndex = majorOrder[idx] ?? idx;
-              return (
+              </div>
+              <div className="mb-4">
                 <PositionDiagram
-                  key={idx}
-                  notes={notes}
+                  notes={majorFirstSevenNotes}
                   extraNotes={majorFullNotes}
-                  title={`Position ${canonicalIndex + 1}`}
+                  title={`${rootId} major 3NPS — positions 1–7 (neutral shapes)`}
+                  fullScale
                   rootSemitone={rootSemitone}
                 />
-              );
-            })}
-          </div>
-        </section>
+              </div>
+              <div className="flex flex-wrap gap-4 justify-start">
+                {majorPositions.map((notes, idx) => {
+                  const canonicalIndex = majorOrder[idx] ?? idx;
+                  return (
+                    <PositionDiagram
+                      key={idx}
+                      notes={notes}
+                      extraNotes={majorFullNotes}
+                      title={`Position ${canonicalIndex + 1}`}
+                      rootSemitone={rootSemitone}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          </TabsContent>
 
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-text-primary mb-3">
-            {rootId} natural minor 3NPS
-          </h2>
-          <p className="text-xs text-text-secondary mb-2">
-            Derived from major (b3). Full fretboard, then a continuous run of positions 1–7, then
-            positions in fretboard order. Root highlighted.
-          </p>
-          <div className="mb-4">
-            <PositionDiagram
-              notes={minorFullNotes}
-              title={`${rootId} natural minor 3NPS — full fretboard`}
-              fullScale
-              rootSemitone={rootSemitone}
-            />
-          </div>
-          <div className="mb-4">
-            <PositionDiagram
-              notes={minorFirstSevenNotes}
-              extraNotes={minorFullNotes}
-              title={`${rootId} natural minor 3NPS — positions 1–7`}
-              fullScale
-              rootSemitone={rootSemitone}
-            />
-          </div>
-          <div className="flex flex-wrap gap-4 justify-start">
-            {minorPositions.map((notes, idx) => {
-              const canonicalIndex = minorOrder[idx] ?? idx;
-              return (
+          {/* Minor Scale Tab */}
+          <TabsContent value="minor" className="space-y-8">
+            <section className="mb-4">
+              <button
+                type="button"
+                onClick={() => setShowCanonicalMinor((prev) => !prev)}
+                className="flex items-center justify-between w-full rounded-md border border-bg-tertiary bg-bg-secondary px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
+              >
+                <span className="font-semibold text-text-secondary">
+                  C Natural Minor 3NPS — canonical positions (1–7)
+                </span>
+                <span className="text-xs text-text-secondary">
+                  {showCanonicalMinor ? 'Hide' : 'Show'}
+                </span>
+              </button>
+              {showCanonicalMinor && (
+                <div className="mt-3 flex flex-wrap gap-3 justify-start">
+                  {getMinor3NPSPositions(ROOT_SEMITONES.C ?? 0).map((notes, idx) => (
+                    <PositionDiagram
+                      key={idx}
+                      notes={notes}
+                      title={`Position ${idx + 1}`}
+                      rootSemitone={ROOT_SEMITONES.C ?? 0}
+                      showFretNumbers={false}
+                      showNoteLabels={false}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="mb-10">
+              <h2 className="text-xl font-semibold text-text-primary mb-3">
+                {rootId} natural minor 3NPS
+              </h2>
+              <p className="text-xs text-text-secondary mb-2">
+                Derived from major (b3). Full fretboard, then a continuous run of positions 1–7, then
+                positions in fretboard order. Root highlighted.
+              </p>
+              <div className="mb-4">
                 <PositionDiagram
-                  key={idx}
-                  notes={notes}
-                  extraNotes={minorFullNotes}
-                  title={`Position ${canonicalIndex + 1}`}
+                  notes={minorFullNotes}
+                  title={`${rootId} natural minor 3NPS — full fretboard`}
+                  fullScale
                   rootSemitone={rootSemitone}
                 />
-              );
-            })}
-          </div>
-        </section>
+              </div>
+              <div className="mb-4">
+                <PositionDiagram
+                  notes={minorFirstSevenNotes}
+                  extraNotes={minorFullNotes}
+                  title={`${rootId} natural minor 3NPS — positions 1–7`}
+                  fullScale
+                  rootSemitone={rootSemitone}
+                />
+              </div>
+              <div className="flex flex-wrap gap-4 justify-start">
+                {minorPositions.map((notes, idx) => {
+                  const canonicalIndex = minorOrder[idx] ?? idx;
+                  return (
+                    <PositionDiagram
+                      key={idx}
+                      notes={notes}
+                      extraNotes={minorFullNotes}
+                      title={`Position ${canonicalIndex + 1}`}
+                      rootSemitone={rootSemitone}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          </TabsContent>
+        </Tabs>
+
+        <hr className="my-8 border-bg-tertiary" />
 
         <section className="mb-10">
           <h2 className="text-xl font-semibold text-text-primary mb-3">A minor pentatonic</h2>
@@ -299,7 +301,23 @@ export function Scales() {
         </section>
       </div>
 
-      <Footer disableMetronome disableTransport />
+      <Footer disableMetronome disableTransport keySelector={
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-secondary font-medium">Key:</span>
+          <div className="flex items-center gap-1">
+            {NOTE_NAMES.map((name) => (
+              <Button
+                key={name}
+                variant={rootId === name ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setRootId(name)}
+              >
+                {name}
+              </Button>
+            ))}
+          </div>
+        </div>
+      } />
     </div>
   );
 }
