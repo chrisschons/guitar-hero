@@ -122,8 +122,8 @@ body {
 /* Manual dark mode toggle (overrides system preference) */
 .light {
   /* App-specific colors */
-  --color-bg-primary: #f5f5f5;
-  --color-bg-secondary: #e8e8e8;
+  --color-bg-primary: oklch(92% 0.004 286.32);
+  --color-bg-secondary: oklch(96.7% 0.001 286.375);
   --color-bg-tertiary: #d0d0d0;
   --color-accent: #c41e3a;
   --color-accent-light: #e94560;
@@ -140,9 +140,9 @@ body {
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #c41e3a;
+  --primary: oklch(92% 0.004 286.32);
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(96.7% 0.001 286.375);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
@@ -170,11 +170,11 @@ body {
 
 .dark {
   /* App-specific colors */
-  --color-bg-primary: oklch(12.9% 0.042 264.695);
-  --color-bg-secondary: oklch(20.8% 0.042 265.755);
+  --color-bg-primary: #1a1a2e;
+  --color-bg-secondary: #16213e;
   --color-bg-tertiary: #0f3460;
   --color-accent: #e94560;
-  --color-accent-light: #oklch(71.2% 0.194 13.428);
+  --color-accent-light: #ff5a75;
   --color-text-primary: #eeeeee;
   --color-text-secondary: #aaaaaa;
   --color-string: #888888;
@@ -188,11 +188,11 @@ body {
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(12.9% 0.042 264.695);
+  --primary: #e94560;
   --primary-foreground: #ffffff;
-  --secondary: oklch(20.8% 0.042 265.755);
+  --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(27.9% 0.041 260.031);
+  --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
   --accent: #e94560;
   --accent-foreground: #ffffff;

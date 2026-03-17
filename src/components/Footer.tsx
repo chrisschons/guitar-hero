@@ -183,6 +183,7 @@ export function Footer({
             <Palette />
             Guide
           </a>
+          {/*}
           <button
             onClick={toggleDarkMode}
             className="text-accent hover:text-accent-light transition-colors flex flex-col items-center gap-1"
@@ -192,6 +193,7 @@ export function Footer({
             {isDark ? <Sun size={20} /> : <Moon size={20} />}
             
           </button>
+          */}
         </div>
       </div>
     </footer>
