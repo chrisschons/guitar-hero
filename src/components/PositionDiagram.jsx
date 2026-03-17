@@ -40,9 +40,9 @@ export function PositionDiagram({
   const firstLineBold = minFret === 1;
 
   return (
-    <div className={`bg-bg-secondary rounded-lg p-3 border border-bg-tertiary ${fullScale ? 'w-full' : ''} relative z-0`}>
+    <div className={`bg-secondary rounded-lg p-3 border border-border ${fullScale ? 'w-full' : ''} relative z-0`}>
       {title && (
-        <div className="text-xs font-medium text-text-secondary mb-2 text-center">{title}</div>
+        <div className="text-xs font-medium text-muted-foreground mb-2 text-center">{title}</div>
       )}
       <div className="flex">
         <div className="flex-1 min-w-0">
@@ -52,7 +52,7 @@ export function PositionDiagram({
                 {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => (
                   <div
                     key={fret}
-                    className={`text-center text-[10px] text-text-secondary ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
+                    className={`text-center text-[10px] text-muted-foreground ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
                     style={!fullScale ? { width: cellWidth } : undefined}
                   >
                     {showZeroColumn && fret === 0 ? '' : fret}
@@ -92,7 +92,7 @@ export function PositionDiagram({
                         <div
                           className={`
                             rounded-full z-0 box-border w-3 h-3
-                            ${isRoot ? 'bg-bg-secondary border-2 border-slate-700' : 'bg-slate-700'}
+                            ${isRoot ? 'bg-secondary border-2 border-slate-700' : 'bg-slate-700'}
                           `}
                         />
                       )}
@@ -101,7 +101,7 @@ export function PositionDiagram({
                         <div
                           className={`
                             rounded-full z-10 box-border w-3 h-3
-                            ${isRoot ? 'bg-bg-secondary border-2 border-accent' : 'bg-accent'}
+                            ${isRoot ? 'bg-secondary border-2 border-accent' : 'bg-accent'}
                           `}
                         />
                       )}
@@ -120,7 +120,7 @@ export function PositionDiagram({
                   return (
                     <div
                       key={fret}
-                      className={`text-center text-[10px] text-text-secondary ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'} ${isDotFret ? 'font-bold text-text-primary' : ''}`}
+                      className={`text-center text-[10px] text-muted-foreground ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'} ${isDotFret ? 'font-bold text-foreground' : ''}`}
                       style={!fullScale ? { width: cellWidth } : undefined}
                     >
                       {noteName}

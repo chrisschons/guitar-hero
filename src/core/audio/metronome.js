@@ -45,7 +45,7 @@ function playClickAt(ctx, frequency, gainValue, when) {
  * @param { (remaining: number) => void } [options.onCountIn]
  */
 export function createMetronome(options) {
-  const { bpm, subdivision, volume = 0.3, onBeat, onTick, onCountIn } = options;
+  const { bpm, subdivision, volume = 0.1, onBeat, onTick, onCountIn } = options;
   const beatsPerBar = Math.max(1, Number(options.beatsPerBar) || 4);
   const beatUnit = Number(options.beatUnit) || 1; // 1 = quarter, 1.5 = dotted quarter (6/8)
   const countInBeats = Number(options.countInBeats) ?? beatsPerBar;

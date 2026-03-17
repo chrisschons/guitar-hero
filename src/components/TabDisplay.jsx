@@ -86,10 +86,16 @@ export function TabDisplay({
   // (playheadOffset removed: static view always uses wrapped rows and row/col playhead)
 
   return (
-    <div className="relative pt-10 pb-6 pl-14 pr-6 overflow-hidden">
+    <div
+      data-editor-section="tab-display-root"
+      className="relative pt-10 pb-6 pl-14 pr-6 overflow-hidden"
+    >
       {/* Beat indicator */}
       {showBeatIndicator && (
-      <div className="absolute top-2 left-0 right-0 flex justify-center items-center h-6 z-20">
+      <div
+        data-editor-section="tab-display-beat-indicator"
+        className="absolute top-2 left-0 right-0 flex justify-center items-center h-6 z-20"
+      >
         <div className="flex gap-2">
           {Array.from({ length: beatsPerBarDots }, (_, beat) => beat).map((beat) => {
             // During count-in, countIn is remaining (e.g. 6→1 for 6/8); highlight dot (beatsPerBarDots - countIn)
@@ -100,11 +106,11 @@ export function TabDisplay({
               <motion.div
                 key={`beat-${beat}`}
                 className={`
-                  w-2.5 h-2.5 rounded-full transition-colors
+                  w-2.5 h-2.5 rounded-full bg-accent transition-colors
                   ${isActive 
                     ? beat === 0 
-                      ? 'bg-accent-light shadow-[0_0_10px_rgba(233,69,96,0.6)]' 
-                      : 'bg-accent shadow-[0_0_8px_rgba(233,69,96,0.4)]'
+                      ? 'shadow-[0_0_10px_rgba(233,69,96,0.6)]' 
+                      : 'shadow-[0_0_8px_rgba(233,69,96,0.4)]'
                     : 'bg-gray-700'
                   }
                 `}
@@ -122,12 +128,14 @@ export function TabDisplay({
       {/* Playhead: fixed in scroll mode, moving in static mode (wrapped: one per row position) */}
       {scrollMode ? (
         <div
+          data-editor-section="tab-display-playhead-scroll"
           className="absolute left-[120px] top-5 bottom-5 w-[3px] bg-accent rounded z-10"
           style={{ boxShadow: '0 0 10px rgba(233,69,96,0.4), 0 0 20px rgba(233,69,96,0.4)' }}
         />
       ) : (
         numRows > 0 && playheadRow >= 0 && (
           <div
+            data-editor-section="tab-display-playhead-static"
             className="absolute w-[3px] bg-accent rounded z-10"
             style={{
               left: `calc(3.5rem + ${(playheadColFractional / colsPerRow) * contentWidth}px)`,
@@ -141,11 +149,14 @@ export function TabDisplay({
 
       {/* String labels: only in scroll mode (static mode has compact labels per row) */}
       {scrollMode && (
-        <div className="absolute left-4 top-10 h-[180px] flex flex-col justify-between py-2">
+        <div
+          data-editor-section="tab-display-string-labels"
+          className="absolute left-4 top-10 h-[180px] flex flex-col justify-between py-2"
+        >
           {stringLabels.map((label, stringIndex) => (
             <span 
               key={`string-${stringIndex}`}
-              className="font-mono text-lg font-bold text-text-secondary h-6 flex items-center"
+              className="font-mono text-lg font-bold text-muted-foreground h-6 flex items-center"
             >
               {label}
             </span>
@@ -156,10 +167,12 @@ export function TabDisplay({
       {/* Tab viewport */}
       <div
         ref={containerRef}
+        data-editor-section="tab-display-viewport"
         className="overflow-hidden"
       >
         {scrollMode ? (
           <motion.div
+            data-editor-section="tab-display-scroll-track"
             className="flex h-[180px] relative"
             style={{ x: -scrollPosition }}
           >
@@ -317,14 +330,12 @@ function StaticTabColumn({ column, isActive, showBarLine, showEndBarLine }) {
             />
             {note !== null && (
               <span
-                className={`font-mono text-sm font-bold relative text-accent ${
-                  isActive ? 'text-white scale-110' : ''
+                className={`font-mono text-sm font-bold relative text-accent bg-primary px-2 py-0 ${
+                  isActive ? 'scale-110' : ''
                 }`}
                 style={{
                   zIndex: 2,
-                  textShadow: isActive
-                    ? '0 0 8px rgba(255,255,255,0.8), 0 0 16px rgba(233,69,96,0.6)'
-                    : '0 0 6px rgba(233,69,96,0.4)',
+                  
                 }}
               >
                 {note}

@@ -14,7 +14,6 @@ import { EXERCISE_TYPES, SUBDIVISIONS, getVisualizationData, getSlotsPerMeasure 
 import { TUNINGS, STANDARD_TUNING } from './data/tunings';
 import { getRiff, getMergedRiffList } from './data/riffs';
 import { getSubdivisionsPerBar, getSubdivisionsPerBeat } from './core/exercise';
-import { applyTheme, THEMES, persistThemeId } from './theme';
 
 function App() {
   // Playback state (not persisted)
@@ -36,7 +35,6 @@ function App() {
   const [showFretboard, setShowFretboard] = useLocalStorage('guitar-hero-show-fretboard', true);
   const [tuningId, setTuningId] = useLocalStorage('guitar-hero-tuning', 'standard');
   const [timeSignatureId, setTimeSignatureId] = useLocalStorage('guitar-hero-time-signature', '4/4');
-  const [themeId, setThemeId] = useLocalStorage('guitar-hero-theme-id', 'default');
   const [countInEnabled, setCountInEnabled] = useLocalStorage('guitar-hero-count-in', true);
   const [showFretNotes, setShowFretNotes] = useLocalStorage('guitar-hero-show-fret-notes', false);
 
@@ -219,15 +217,6 @@ function App() {
     setScrollPosition(INITIAL_SCROLL);
   };
 
-  const handleThemeChange = (id) => {
-    const theme = THEMES[id];
-    if (theme) {
-      applyTheme(theme);
-      persistThemeId(id);
-      setThemeId(id);
-    }
-  };
-
   const handleResetAllToDefaults = () => {
     handleReset();
     setBpm(120);
@@ -258,9 +247,9 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-bg-secondary text-foreground">
       {/* Toolbar at top, full width, sticky */}
-      <div className="sticky top-0 z-10 w-full bg-bg-secondary border-b border-bg-tertiary shrink-0">
+      <div className="sticky top-0 z-10 w-full bg-secondary border-b border-border shrink-0">
         <Controls
           rootNote={rootNote}
           onRootChange={handleRootChange}
@@ -288,8 +277,6 @@ function App() {
           onTabScrollModeChange={setTabScrollMode}
           showFretboard={showFretboard}
           onShowFretboardChange={setShowFretboard}
-          themeId={themeId}
-          onThemeChange={handleThemeChange}
           countInEnabled={countInEnabled}
           onCountInEnabledChange={setCountInEnabled}
           showFretNotes={showFretNotes}
@@ -312,10 +299,11 @@ function App() {
           tuning={tuning}
         />
 
-        <div className="fixed bottom-20 w-full flex-1 flex flex-col z-10 bg-linear-to-t from-bg-primary to-bg-primaryt">
+        <div className="fixed bottom-20 w-full flex-1 flex flex-col z-10 bg-linear-to-t from-bg-primary to-bg-primary">
           <div className="mx-auto x-3">
           {showFretboard && (
             <FretboardDiagram
+              
               vizData={vizData}
               currentNotes={currentNotes}
               rootNote={rootNote}

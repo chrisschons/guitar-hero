@@ -36,9 +36,9 @@ export function ChordDiagram({ chord, title = '', chordType = '', tuning = STAND
   })();
 
   return (
-    <div className="bg-bg-secondary rounded-lg p-3 border border-bg-tertiary inline-block">
+    <div className="bg-secondary rounded-lg p-3 border border-border inline-block">
       {title && (
-        <div className="text-xs font-medium text-text-secondary mb-2 text-center">{title}</div>
+        <div className="text-xs font-medium text-muted-foreground mb-2 text-center">{title}</div>
       )}
       <div className="flex">
         <div className="relative flex flex-col">
@@ -75,7 +75,7 @@ export function ChordDiagram({ chord, title = '', chordType = '', tuning = STAND
             {fretLabels.map((label, i) => (
               <div
                 key={i}
-                className="text-center text-[10px] text-text-secondary shrink-0 flex items-center justify-center"
+                className="text-center text-[10px] text-muted-foreground shrink-0 flex items-center justify-center"
                 style={{ width: cellWidth }}
               >
                 {label}
@@ -111,7 +111,7 @@ export function ChordDiagram({ chord, title = '', chordType = '', tuning = STAND
                       style={{ width: cellWidth }}
                     >
                       {showMute && (
-                        <span className="text-xs font-mono text-text-secondary z-10">×</span>
+                        <span className="text-xs font-mono text-muted-foreground z-10">×</span>
                       )}
                       {showOpen && !showMute && (
                         <span className="text-xs font-mono text-accent z-10">○</span>
@@ -119,7 +119,7 @@ export function ChordDiagram({ chord, title = '', chordType = '', tuning = STAND
                       {showDot && (
                         <div
                           className={`rounded-full z-10 box-border w-3 h-3 ${
-                            showRoot ? 'bg-bg-secondary border-2 border-accent' : 'bg-accent'
+                            showRoot ? 'bg-secondary border-2 border-accent' : 'bg-accent'
                           }`}
                         />
                       )}

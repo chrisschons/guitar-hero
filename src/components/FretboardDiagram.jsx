@@ -123,14 +123,14 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
     : null;
   
   return (
-    <div className="bg-bg-secondary rounded-xl p-4 mb-6 overflow-x-auto">
+    <div className="bg-secondary rounded-xl p-4 mb-6 overflow-x-auto shadow-xl">
       <div className="flex min-w-[700px]">
         {/* String labels */}
         <div className="flex flex-col pr-2 mt-5">
           {stringLabels.map((label) => (
             <span 
               key={label} 
-              className="text-xs font-mono text-text-secondary h-5 flex items-center"
+              className="text-xs font-mono text-muted-foreground h-5 flex items-center"
             >
               {label}
             </span>
@@ -144,7 +144,7 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
             {FRET_RANGE.map((fret) => (
               <div 
                 key={fret} 
-                className="flex-1 text-center text-[10px] text-text-secondary"
+                className="flex-1 text-center text-[10px] text-muted-foreground"
                 style={{ minWidth: 36 }}
               >
                 {fret}
@@ -217,10 +217,10 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
                               ? 'bg-white shadow-[0_0_16px_rgba(255,255,255,0.9)]'
                               : inCurrentPosition
                                 ? isRoot
-                                  ? 'bg-bg-secondary border-2 border-accent'
+                                  ? 'bg-secondary border-2 border-accent'
                                   : 'bg-accent'
                                 : isRoot
-                                  ? 'bg-bg-secondary border-2 border-slate-700'
+                                  ? 'bg-secondary border-2 border-slate-700'
                                   : 'bg-slate-700'
                             }
                           `}
@@ -265,7 +265,7 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
               return (
                 <div
                   key={fret}
-                  className={`flex-1 text-center text-[10px] text-text-secondary ${isDotFret ? 'font-bold text-text-primary' : ''}`}
+                  className={`flex-1 text-center text-[10px] text-muted-foreground ${isDotFret ? 'font-bold text-foreground' : ''}`}
                   style={{ minWidth: 36 }}
                 >
                   {noteName}

@@ -1,15 +1,23 @@
 import { StrictMode, useState, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import { loadAndApplyTheme } from './theme'
 import App from './App.jsx'
 import { BravuraDemo } from './pages/BravuraDemo.jsx'
 import { Chords } from './pages/Chords.tsx'
 import { Tuner } from './pages/Tuner.tsx'
 import { Editor } from './pages/Editor.tsx'
 import { Scales } from './pages/Scales.tsx'
+import { DesignGuide } from './pages/DesignGuide.tsx'
 
-loadAndApplyTheme()
+// Initialize dark mode based on system preference or saved preference
+(() => {
+  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (systemPrefersDark) {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.add('light');
+  }
+})();
 
 function Router() {
   const [route, setRoute] = useState(window.location.hash);
@@ -38,6 +46,10 @@ function Router() {
 
   if (route === '#/editor') {
     return <Editor />;
+  }
+
+  if (route === '#/design-guide') {
+    return <DesignGuide />;
   }
 
 

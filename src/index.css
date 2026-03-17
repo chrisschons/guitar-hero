@@ -13,20 +13,6 @@
   font-display: swap;
 }
 
-@theme {
-  --color-bg-primary: #1a1a2e;
-  --color-bg-secondary: #16213e;
-  --color-bg-tertiary: #0f3460;
-  --color-accent: #e94560;
-  --color-accent-light: #ff5a75;
-  --color-text-primary: #eeeeee;
-  --color-text-secondary: #aaaaaa;
-  --color-string: #888888;
-  /* Grid note chip: default note color and selection highlight */
-  --color-chip: #e11d48;
-  --color-chip-selected: #22d3ee;
-}
-
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background-color: var(--color-bg-primary);
@@ -34,22 +20,133 @@ body {
   min-height: 100vh;
 }
 
+/* Light mode (default) */
 :root {
+  /* App-specific colors */
+  --color-bg-primary: #f5f5f5;
+  --color-bg-secondary: #e8e8e8;
+  --color-bg-tertiary: #d0d0d0;
+  --color-accent: #c41e3a;
+  --color-accent-light: #e94560;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #555555;
+  --color-string: #666666;
+  --color-chip: #e94560;
+  --color-chip-selected: #22d3ee;
+
+  /* Tailwind design tokens (light) */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* primary = app accent (#e94560) */
-  --primary: #e94560;
+  --primary: #c41e3a;
   --primary-foreground: #ffffff;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  /* accent = app coral (active notes, tab numbers, playhead) */
-  --accent: #e94560;
+  --accent: #c41e3a;
+  --accent-foreground: #ffffff;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* Dark mode (system preference or manual .dark class) */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    /* App-specific colors */
+    --color-bg-primary: oklch(12.9% 0.042 264.695);
+    --color-bg-secondary: oklch(20.8% 0.042 265.755);
+    --color-bg-tertiary: #0f3460;
+    --color-accent: #e94560;
+    --color-accent-light: #oklch(71.2% 0.194 13.428);
+    --color-text-primary: #eeeeee;
+    --color-text-secondary: #aaaaaa;
+    --color-string: #888888;
+    --color-chip: #e94560;
+    --color-chip-selected: #22d3ee;
+
+    /* Tailwind design tokens (dark) */
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(12.9% 0.042 264.695);
+    --primary-foreground: #ffffff;
+    --secondary: oklch(20.8% 0.042 265.755);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(27.9% 0.041 260.031);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: #e94560;
+    --accent-foreground: #ffffff;
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.809 0.105 251.813);
+    --chart-2: oklch(0.623 0.214 259.815);
+    --chart-3: oklch(0.546 0.245 262.881);
+    --chart-4: oklch(0.488 0.243 264.376);
+    --chart-5: oklch(0.424 0.199 265.638);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+  }
+}
+
+/* Manual dark mode toggle (overrides system preference) */
+.light {
+  /* App-specific colors */
+  --color-bg-primary: #f5f5f5;
+  --color-bg-secondary: #e8e8e8;
+  --color-bg-tertiary: #d0d0d0;
+  --color-accent: #c41e3a;
+  --color-accent-light: #e94560;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #555555;
+  --color-string: #666666;
+  --color-chip: #c41e3a;
+  --color-chip-selected: #22d3ee;
+
+  /* Tailwind design tokens (light) */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: #c41e3a;
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: #c41e3a;
   --accent-foreground: #ffffff;
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
@@ -72,20 +169,31 @@ body {
 }
 
 .dark {
+  /* App-specific colors */
+  --color-bg-primary: oklch(12.9% 0.042 264.695);
+  --color-bg-secondary: oklch(20.8% 0.042 265.755);
+  --color-bg-tertiary: #0f3460;
+  --color-accent: #e94560;
+  --color-accent-light: #oklch(71.2% 0.194 13.428);
+  --color-text-primary: #eeeeee;
+  --color-text-secondary: #aaaaaa;
+  --color-string: #888888;
+  --color-chip: #e94560;
+  --color-chip-selected: #22d3ee;
+
+  /* Tailwind design tokens (dark) */
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  /* primary = app accent (#e94560) */
-  --primary: #e94560;
+  --primary: oklch(12.9% 0.042 264.695);
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.269 0 0);
+  --secondary: oklch(20.8% 0.042 265.755);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
+  --muted: oklch(27.9% 0.041 260.031);
   --muted-foreground: oklch(0.708 0 0);
-  /* accent = app coral (active notes, tab numbers, playhead) */
   --accent: #e94560;
   --accent-foreground: #ffffff;
   --destructive: oklch(0.704 0.191 22.216);
@@ -140,6 +248,8 @@ body {
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-chip: var(--color-chip);
+  --color-chip-selected: var(--color-chip-selected);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -177,7 +287,7 @@ body {
 
 /* Grid editor: thin, app-like horizontal scrollbar */
 .grid-horizontal-scroll {
-  scrollbar-width: thin;
+ 
   scrollbar-color: var(--color-text-secondary) transparent;
 }
 .grid-horizontal-scroll::-webkit-scrollbar {
@@ -188,6 +298,95 @@ body {
 }
 .grid-horizontal-scroll::-webkit-scrollbar-thumb {
   background: var(--color-text-secondary);
+  border-radius: 4px;
+  opacity: 0.6;
+}
+.grid-horizontal-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-primary);
+}
+
+@theme inline {
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-chip: var(--color-chip);
+  --color-chip-selected: var(--color-chip-selected);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* State test grid: force cursor during drag/resize/marquee so it overrides child elements (handles, cells) */
+.state-test-grid-cursor-grabbing,
+.state-test-grid-cursor-grabbing * {
+  cursor: grabbing !important;
+}
+.state-test-grid-cursor-col-resize,
+.state-test-grid-cursor-col-resize * {
+  cursor: col-resize !important;
+}
+.state-test-grid-cursor-crosshair,
+.state-test-grid-cursor-crosshair * {
+  cursor: crosshair !important;
+}
+
+/* Grid editor: thin, app-like horizontal scrollbar */
+.grid-horizontal-scroll {
+  scrollbar-color: var(--color-accent) var(--color-bg-secondary);
+}
+.grid-horizontal-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.grid-horizontal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.grid-horizontal-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-text-accent);
   border-radius: 4px;
   opacity: 0.6;
 }
