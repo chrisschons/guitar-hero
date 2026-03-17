@@ -7,11 +7,11 @@ const CHORD_TYPES = ['major', 'minor', 'seventh'] as const;
 
 export function Chords() {
   return (
-    <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary">
+    <div className="min-h-screen flex flex-col text-foreground">
       <div className="flex-1 p-8 pb-24 max-w-6xl mx-auto w-full">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-text-primary mb-2">Chords</h1>
-          <p className="text-text-secondary">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Chords</h1>
+          <p className="text-muted-foreground">
             Common open and moveable chord shapes. Root notes use the outline style; ○ = open
             string, × = mute.
           </p>
@@ -23,7 +23,7 @@ export function Chords() {
           const label = BASIC_CHORD_LABELS[typeId] || typeId;
           return (
             <section key={typeId} className="mb-10">
-              <h2 className="text-xl font-semibold text-text-primary mb-4">{label}</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">{label}</h2>
               <div className="flex flex-wrap gap-6">
                 {chords.map((chord) => (
                   <ChordDiagram

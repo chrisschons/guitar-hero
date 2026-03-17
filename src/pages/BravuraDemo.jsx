@@ -275,19 +275,19 @@ function PentatonicExample() {
   }, []);
 
   return (
-    <section className="mb-8 p-6 bg-bg-secondary rounded-lg">
+    <section className="mb-8 p-6 bg-secondary rounded-lg">
       <h2 className="text-xl font-semibold mb-4">Pentatonic Exercise Example</h2>
-      <p className="text-text-secondary text-sm mb-4">
+      <p className="text-muted-foreground text-sm mb-4">
         A Minor Pentatonic - Position 1 (first 8 notes ascending): A, C, D, E, G, A, C, D
       </p>
-      <p className="text-text-secondary text-sm mb-4">
+      <p className="text-muted-foreground text-sm mb-4">
         Rendered with <a href="https://vexflow.com" target="_blank" rel="noopener noreferrer" className="text-accent hover:text-accent-light">VexFlow</a> using Bravura font
       </p>
       
       <div ref={wrapperRef} className="overflow-x-auto">
         {status === 'loading' && (
           <div className="min-h-[160px] flex items-center justify-center">
-            <span className="text-text-secondary">Loading VexFlow...</span>
+            <span className="text-muted-foreground">Loading VexFlow...</span>
           </div>
         )}
         {status === 'error' && (
@@ -295,7 +295,7 @@ function PentatonicExample() {
         )}
       </div>
       
-      <div className="mt-4 text-xs text-text-secondary">
+      <div className="mt-4 text-xs text-muted-foreground">
         <p className="mb-2">VexFlow handles all the complex SMuFL glyph positioning automatically:</p>
         <ul className="list-disc list-inside space-y-1">
           <li>Proper stem directions based on note position</li>
@@ -321,21 +321,21 @@ function SymbolCard({ code, name }) {
   return (
     <button
       onClick={handleCopy}
-      className="flex flex-col items-center p-4 bg-bg-secondary rounded-lg hover:bg-bg-tertiary transition-colors cursor-pointer group"
+      className="flex flex-col items-center p-4 bg-secondary rounded-lg hover:bg-muted transition-colors cursor-pointer group"
     >
       <span 
-        className="text-6xl mb-3 text-text-primary"
+        className="text-6xl mb-3 text-foreground"
         style={{ fontFamily: 'Bravura' }}
       >
         {code}
       </span>
-      <span className="text-xs text-text-secondary text-center break-all">
+      <span className="text-xs text-muted-foreground text-center break-all">
         {name}
       </span>
       <span className="text-xs text-accent mt-1 font-mono">
         U+{codePoint}
       </span>
-      <span className={`text-xs mt-2 transition-opacity ${copied ? 'opacity-100 text-green-400' : 'opacity-0 group-hover:opacity-100 text-text-secondary'}`}>
+      <span className={`text-xs mt-2 transition-opacity ${copied ? 'opacity-100 text-green-400' : 'opacity-0 group-hover:opacity-100 text-muted-foreground'}`}>
         {copied ? 'Copied!' : 'Click to copy'}
       </span>
     </button>
@@ -349,10 +349,10 @@ export function BravuraDemo() {
     <div className="min-h-screen flex flex-col">
       <div className="flex-1 p-8 max-w-6xl mx-auto w-full">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-text-primary mb-2">
+        <h1 className="text-3xl font-bold text-foreground mb-2">
           Bravura
         </h1>
-        <p className="text-text-secondary">
+        <p className="text-muted-foreground">
           SMuFL (Standard Music Font Layout) is a specification for music symbols.
           Bravura is the reference font implementing this standard.
         </p>
@@ -366,28 +366,28 @@ export function BravuraDemo() {
 
       <PentatonicExample />
 
-      <section className="mb-8 p-6 bg-bg-secondary rounded-lg">
+      <section className="mb-8 p-6 bg-secondary rounded-lg">
         <h2 className="text-xl font-semibold mb-4">Usage</h2>
         <div className="space-y-4 text-sm">
           <div>
-            <h3 className="text-text-secondary mb-2">In CSS:</h3>
-            <pre className="bg-bg-primary p-3 rounded text-text-primary overflow-x-auto">
+            <h3 className="text-muted-foreground mb-2">In CSS:</h3>
+            <pre className="bg-background p-3 rounded text-foreground overflow-x-auto">
 {`.music-symbol {
   font-family: 'Bravura';
 }`}
             </pre>
           </div>
           <div>
-            <h3 className="text-text-secondary mb-2">In React/JSX:</h3>
-            <pre className="bg-bg-primary p-3 rounded text-text-primary overflow-x-auto">
+            <h3 className="text-muted-foreground mb-2">In React/JSX:</h3>
+            <pre className="bg-background p-3 rounded text-foreground overflow-x-auto">
 {`<span style={{ fontFamily: 'Bravura' }}>
   {'\uE050'}  {/* G Clef */}
 </span>`}
             </pre>
           </div>
           <div>
-            <h3 className="text-text-secondary mb-2">Example Output:</h3>
-            <div className="bg-bg-primary p-4 rounded flex items-center gap-4">
+            <h3 className="text-muted-foreground mb-2">Example Output:</h3>
+            <div className="bg-background p-4 rounded flex items-center gap-4">
               <span style={{ fontFamily: 'Bravura', fontSize: '48px' }}>{'\uE050'}</span>
               <span style={{ fontFamily: 'Bravura', fontSize: '48px' }}>{'\uE084'}{'\uE084'}</span>
               <span style={{ fontFamily: 'Bravura', fontSize: '48px' }}>{'\uE0A4'}</span>
@@ -409,7 +409,7 @@ export function BravuraDemo() {
               className={`px-4 py-2 rounded-lg transition-colors ${
                 activeCategory === key
                   ? 'bg-accent text-white'
-                  : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary'
+                  : 'bg-secondary text-muted-foreground hover:bg-muted'
               }`}
             >
               {category.name}
@@ -424,9 +424,9 @@ export function BravuraDemo() {
         </div>
       </section>
 
-      <section className="mt-12 p-6 bg-bg-secondary rounded-lg mb-20">
+      <section className="mt-12 p-6 bg-secondary rounded-lg mb-20">
         <h2 className="text-xl font-semibold mb-4">Resources</h2>
-        <ul className="space-y-2 text-text-secondary">
+        <ul className="space-y-2 text-muted-foreground">
           <li>
             <a 
               href="https://www.smufl.org/" 

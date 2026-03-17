@@ -83,7 +83,7 @@ export function EditorHeader({
   const maxBpm = 220;
 
   return (
-    <header className="sticky top-0 z-10 bg-bg-secondary border-b border-bg-tertiary p-3 flex flex-wrap items-center gap-3">
+    <header className="sticky top-0 z-10 bg-secondary border-b border-border p-3 flex flex-wrap items-center gap-3 bg-secondary">
       {showBackButton && (
         <a href="#/" className="text-accent hover:underline shrink-0">
           ← Back
@@ -106,8 +106,8 @@ export function EditorHeader({
                     type="button"
                     className={`inline-flex items-center justify-center rounded p-0.5 ${
                       canDelete
-                        ? 'text-text-secondary hover:text-red-400'
-                        : 'text-text-secondary/40 cursor-default'
+                    ? 'text-muted-foreground hover:text-red-400'
+                    : 'text-muted-foreground/40 cursor-default'
                     }`}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -142,7 +142,7 @@ export function EditorHeader({
             <Button
               variant="outline"
               size="sm"
-              className="rounded-full border-bg-tertiary bg-bg-tertiary text-sm"
+              className="rounded-full bg-muted text-sm"
             >
               New riff
             </Button>
@@ -185,14 +185,14 @@ export function EditorHeader({
       */}
       {/*}
       <span
-        className="text-xs text-text-secondary shrink-0"
+        className="text-xs text-muted-foreground shrink-0"
         title={isUnsaved ? 'Unsaved changes' : 'Saved'}
       >
         {isUnsaved ? 'Unsaved' : 'Saved'}
       </span>
       */}
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-text-secondary">Time</span>
+        <span className="text-muted-foreground">Time</span>
         <Select
           value={timeSignatureId}
           onValueChange={(value) => {
@@ -213,7 +213,7 @@ export function EditorHeader({
         </Select>
       </div>
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-text-secondary">Bars</span>
+        <span className="text-muted-foreground">Bars</span>
         <Select
           value={String(bars)}
           onValueChange={(value) => {
@@ -236,7 +236,7 @@ export function EditorHeader({
       {/*}
       <button
         onClick={onCopyAsJson}
-        className="flex items-center gap-2 px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 text-sm"
+        className="flex items-center gap-2 px-3 py-2 rounded bg-muted hover:bg-muted/80 text-sm"
         title="Copy riff as JSON to clipboard (paste into a preset file)"
       >
         <Copy size={16} />
@@ -245,7 +245,7 @@ export function EditorHeader({
       {onExportFile && (
         <button
           onClick={onExportFile}
-          className="flex items-center gap-2 px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 text-sm"
+          className="flex items-center gap-2 px-3 py-2 rounded bg-muted hover:bg-muted/80 text-sm"
           title="Download riff as JSON file"
         >
           <Download size={16} />
@@ -267,7 +267,7 @@ export function EditorHeader({
           />
           <label
             htmlFor="editor-import-riff"
-            className="flex items-center gap-2 px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 text-sm cursor-pointer"
+            className="flex items-center gap-2 px-3 py-2 rounded bg-muted hover:bg-muted/80 text-sm cursor-pointer"
             title="Import riff from JSON file"
           >
             <Upload size={16} />
@@ -278,7 +278,7 @@ export function EditorHeader({
       {onInsertChordPreset && (
         <button
           onClick={onInsertChordPreset}
-          className="px-3 py-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 text-sm"
+          className="px-3 py-2 rounded bg-muted hover:bg-muted/80 text-sm"
           title="Insert chord preset at current position"
         >
           Chord+
@@ -290,7 +290,7 @@ export function EditorHeader({
           <button
             onClick={onUndo}
             disabled={!canUndo}
-            className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="p-2 rounded bg-muted hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed"
             title="Undo (Ctrl+Z)"
           >
             <Undo2 size={16} />
@@ -298,7 +298,7 @@ export function EditorHeader({
           <button
             onClick={onRedo}
             disabled={!canRedo}
-            className="p-2 rounded bg-bg-tertiary hover:bg-bg-tertiary/80 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="p-2 rounded bg-muted hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed"
             title="Redo (Ctrl+Shift+Z)"
           >
             <Redo2 size={16} />
@@ -308,7 +308,7 @@ export function EditorHeader({
       */}
       <div className="flex gap-2 items-center">
         {/*}
-        <div className="flex items-center gap-1 text-xs text-text-secondary">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <span>Tab Scroller</span>
           <Switch
             checked={showTabScroller}
@@ -318,7 +318,7 @@ export function EditorHeader({
         */}
         {onMetronomeVolumeChange != null && (
           <div className="flex items-center gap-2">
-            <Metronome size={18} className="text-text-secondary shrink-0" />
+            <Metronome size={18} className="text-muted-foreground shrink-0" />
             <Slider
               value={[metronomeVolume]}
               onValueChange={(vals) => {

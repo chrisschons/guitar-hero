@@ -313,9 +313,14 @@ export function GridTimeline({
   }
 
   return (
-    <section ref={rootRef} className="mb-6 relative">
+    <section
+      ref={rootRef}
+      data-editor-section="grid-timeline"
+      className="mb-6 relative"
+    >
       <div
-        className="overflow-x-hidden rounded border border-bg-tertiary select-none"
+        data-editor-section="grid-timeline-scroll"
+        className="overflow-x-hidden rounded border border-border select-none"
         style={{ paddingLeft: scrollOffset }}
       >
         <div
@@ -325,13 +330,16 @@ export function GridTimeline({
             transform: `translateX(-${translateX}px)`,
           }}
         >
-          <table className="border-collapse text-sm relative z-0">
+          <table
+            data-editor-section="grid-timeline-table"
+            className="border-collapse text-sm relative z-0"
+          >
             <thead>
               <tr>
                 {Array.from({ length: totalColumns }, (_, i) => (
                   <th
                     key={i}
-                    className={`p-0.5 text-center text-text-secondary font-normal ${
+                    className={`p-0.5 text-center text-muted-foreground font-normal ${
                       i % subsPerBar === 0 ? 'border-l border-text-secondary/40' : ''
                     }`}
                     style={{ width: COLUMN_WIDTH, minWidth: COLUMN_WIDTH }}
@@ -369,7 +377,7 @@ export function GridTimeline({
                     return (
                       <td
                         key={col}
-                        className={`p-0 relative border border-bg-tertiary/60 ${
+                        className={`p-0 relative border border-border/60 ${
                           isDurationDrag ? 'cursor-col-resize' : 'cursor-pointer'
                         } transition-colors ${
                           col % subsPerBar === 0 ? 'border-l border-text-secondary/40' : ''

@@ -84,8 +84,8 @@ export function Scales() {
   const minorFirstSevenNotes = minorPositions.flat();
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary relative">
-      <header className="sticky top-0 z-20 w-full bg-bg-secondary border-b border-bg-tertiary">
+    <div className="min-h-screen flex flex-col text-foreground relative">
+      <header className="sticky top-0 z-20 w-full bg-secondary border-b border-border">
         <Tabs defaultValue="major" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'major' | 'minor')} className="w-full p-0">
           <TabsList variant="line" className="w-full justify-start rounded-none gap-0 bg-transparent px-6">
             <TabsTrigger value="major" className="py-3">Major Scale</TabsTrigger>
@@ -102,12 +102,12 @@ export function Scales() {
               <button
                 type="button"
                 onClick={() => setShowCanonicalMajor((prev) => !prev)}
-                className="flex items-center justify-between w-full rounded-md border border-bg-tertiary bg-bg-secondary px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
+                className="flex items-center justify-between w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
               >
-                <span className="font-semibold text-text-secondary">
+                <span className="font-semibold text-muted-foreground">
                   C Major 3NPS — canonical positions (1–7)
                 </span>
-                <span className="text-xs text-text-secondary">
+                <span className="text-xs text-muted-foreground">
                   {showCanonicalMajor ? 'Hide' : 'Show'}
                 </span>
               </button>
@@ -128,11 +128,11 @@ export function Scales() {
             </section>
 
             <section className="mb-10">
-              <h2 className="text-xl font-semibold text-text-primary mb-3">
+              <h2 className="text-xl font-semibold text-foreground mb-3">
                 {rootId} Major 3NPS
               </h2>
              
-              <p className="text-xs text-text-secondary mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
                 Full fretboard, then positions ordered by lowest fret (closest to nut first). Root
                 highlighted. Labels remain canonical (Position 1–7).
               </p>
@@ -176,12 +176,12 @@ export function Scales() {
               <button
                 type="button"
                 onClick={() => setShowCanonicalMinor((prev) => !prev)}
-                className="flex items-center justify-between w-full rounded-md border border-bg-tertiary bg-bg-secondary px-3 py-2 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
+                className="flex items-center justify-between w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
               >
-                <span className="font-semibold text-text-secondary">
+                <span className="font-semibold text-muted-foreground">
                   C Natural Minor 3NPS — canonical positions (1–7)
                 </span>
-                <span className="text-xs text-text-secondary">
+                <span className="text-xs text-muted-foreground">
                   {showCanonicalMinor ? 'Hide' : 'Show'}
                 </span>
               </button>
@@ -202,10 +202,10 @@ export function Scales() {
             </section>
 
             <section className="mb-10">
-              <h2 className="text-xl font-semibold text-text-primary mb-3">
+              <h2 className="text-xl font-semibold text-foreground mb-3">
                 {rootId} natural minor 3NPS
               </h2>
-              <p className="text-xs text-text-secondary mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
                 Derived from major (b3). Full fretboard, then a continuous run of positions 1–7, then
                 positions in fretboard order. Root highlighted.
               </p>
@@ -244,11 +244,11 @@ export function Scales() {
           </TabsContent>
         </Tabs>
 
-        <hr className="my-8 border-bg-tertiary" />
+        <hr className="my-8 border-border" />
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold text-text-primary mb-3">A minor pentatonic</h2>
-          <p className="text-xs text-text-secondary mb-2">
+          <h2 className="text-xl font-semibold text-foreground mb-3">A minor pentatonic</h2>
+          <p className="text-xs text-muted-foreground mb-2">
             Full fretboard for A minor pentatonic (A, C, D, E, G), then the 5 hardcoded positions.
           </p>
           <div className="mb-4">
@@ -274,8 +274,8 @@ export function Scales() {
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold text-text-primary mb-3">A blues</h2>
-          <p className="text-xs text-text-secondary mb-2">
+          <h2 className="text-xl font-semibold text-foreground mb-3">A blues</h2>
+          <p className="text-xs text-muted-foreground mb-2">
             Full fretboard for A blues (A, C, D, D♯, E, G), then the 5 hardcoded positions.
           </p>
           <div className="mb-4">
@@ -303,13 +303,14 @@ export function Scales() {
 
       <Footer disableMetronome disableTransport keySelector={
         <div className="flex items-center gap-2">
-          <span className="text-xs text-text-secondary font-medium">Key:</span>
-          <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground font-medium">Key:</span>
+          <div className="flex items-center gap-2">
             {NOTE_NAMES.map((name) => (
               <Button
+              className="w-[40px]"
                 key={name}
                 variant={rootId === name ? 'default' : 'outline'}
-                size="sm"
+                size="lg"
                 onClick={() => setRootId(name)}
               >
                 {name}

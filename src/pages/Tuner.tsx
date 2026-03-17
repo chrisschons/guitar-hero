@@ -40,8 +40,8 @@ export function Tuner() {
   return (
     <div className="min-h-screen p-8 max-w-lg mx-auto flex flex-col items-center">
       <header className="mb-8 w-full">
-        <h1 className="text-3xl font-bold text-text-primary mb-2">Tuner</h1>
-        <p className="text-text-secondary text-sm mb-4">
+        <h1 className="text-3xl font-bold text-foreground mb-2">Tuner</h1>
+        <p className="text-muted-foreground text-sm mb-4">
           Play a string or note. Allow microphone access when prompted.
         </p>
         <a
@@ -76,17 +76,17 @@ export function Tuner() {
               setActive(false);
               setPitch(null);
             }}
-            className="mb-6 text-sm text-text-secondary hover:text-text-primary transition-colors"
+            className="mb-6 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Stop
           </button>
 
-          <div className="w-full bg-bg-secondary rounded-xl p-8 border border-bg-tertiary text-center">
-            <div className="text-5xl font-bold text-text-primary tabular-nums mb-2">
+          <div className="w-full bg-secondary rounded-xl p-8 border border-border text-center">
+            <div className="text-5xl font-bold text-foreground tabular-nums mb-2">
               {pitch ? pitch.noteName : '—'}
             </div>
             {pitch && (
-              <div className="text-lg text-text-secondary mb-4">
+              <div className="text-lg text-muted-foreground mb-4">
                 {pitch.frequency.toFixed(1)} Hz
               </div>
             )}
@@ -106,7 +106,7 @@ export function Tuner() {
                 />
               )}
             </div>
-            <div className="flex justify-between text-[10px] text-text-secondary px-4">
+            <div className="flex justify-between text-[10px] text-muted-foreground px-4">
               <span>-50¢</span>
               <span>0</span>
               <span>+50¢</span>

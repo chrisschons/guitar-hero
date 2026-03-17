@@ -3,10 +3,14 @@
 ## Features & Improvements
 
 ### General
-- Need better demos, based on editor functionality not exercises
+- Need better demos. Clear out the existing ones and replace with riffs based on editor functionality, not exercises
 - Add volume control (all pages)
 - Add stop button (all pages)
+- Change to no text play button
 - Refactor design tokens and core UI colors (notes, frets, etc.)
+
+### Exercise
+- Move Key option to only be visible for scale exercises
 
 ### Grid Editor
 - Add more top/bottom padding
@@ -16,11 +20,11 @@
 - Add quick duplicate option
 - Add metronome visualization
 - More consistent Save UX with local storage
+- Q - quarter note
 
 ### Scales
-- Change to selector button in footer
-- Add tabs for major/minor modes
 - Add regular scale, not just 3NPS
+- update blues to work with new system
 
 ### Chords
 - Make boxes bigger
@@ -28,9 +32,9 @@
 ### Practice
 - Add ability to open riff in editor
 - Make changes and save as a copy
+- Metronome needs to be sticky
 
 ### Tab Display
-- Add background color for numbers to hide string line
 
 ### Navigation & UI
 - Add minimap with bars
@@ -42,3 +46,4 @@
 - **Audio**: Volume difference between notes and metronome
 - **Tuning**: Exercises don't adjust display based on tuning
 - **Audio**: Sound persists on loop sometimes
+- **Metrononme**: First metronome dot does not hightlight in count in 

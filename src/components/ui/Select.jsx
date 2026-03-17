@@ -10,7 +10,7 @@ const SelectTrigger = React.forwardRef(({ className, size = 'default', children,
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex items-center justify-between whitespace-nowrap rounded-full bg-bg-tertiary border border-gray-700 py-1.5 text-sm text-text-primary',
+  'flex items-center justify-between whitespace-nowrap rounded-full bg-muted border border-border py-1.5 text-sm text-foreground',
       size === 'sm' && 'h-6 px-2.5 text-xs',
       size === 'default' && 'h-8 px-3',
       'focus:outline-none focus:border-accent',
@@ -32,7 +32,7 @@ const SelectContent = React.forwardRef(({ className, children, position = 'poppe
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg bg-bg-tertiary border border-gray-700 text-text-primary shadow-lg',
+        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg bg-muted border border-border text-foreground shadow-lg',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',

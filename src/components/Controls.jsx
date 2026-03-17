@@ -1,16 +1,10 @@
-import { Tally3, Guitar, Palette, RotateCcw } from 'lucide-react';
+import { Tally3, Guitar, RotateCcw } from 'lucide-react';
 import { EXERCISE_TYPES, SUBDIVISIONS, TIME_SIGNATURES } from '../data/exerciseTypes';
 import { TUNINGS_LIST } from '../data/tunings';
 import { getStringLabels, NOTE_NAMES } from '../core/music';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
-
-const THEME_OPTIONS = [
-  { id: 'default', label: 'Default' },
-  { id: 'light', label: 'Light' },
-  { id: 'dark', label: 'Dark' },
-];
 
 export function Controls({
   rootNote,
@@ -39,8 +33,6 @@ export function Controls({
   onTabScrollModeChange,
   showFretboard,
   onShowFretboardChange,
-  themeId,
-  onThemeChange,
   countInEnabled,
   onCountInEnabledChange,
   showFretNotes,
@@ -58,7 +50,7 @@ export function Controls({
           {TUNINGS_LIST.map((t) => (
             <SelectItem key={t.id} value={t.id}>
               {t.name}{' '}
-              <span className="text-xs text-text-secondary">
+              <span className="text-xs text-muted-foreground">
                 {getStringLabels(t.semitones).join(' ')}
               </span>
             </SelectItem>
@@ -154,7 +146,7 @@ export function Controls({
 
 {/*
       <div className="hidden md:flex items-center gap-2">
-        <span className="text-xs text-text-secondary">Click</span>
+        <span className="text-xs text-muted-foreground">Click</span>
         <Slider
           defaultValue={[metronomeVolume]}
           onValueChange={(values) => {
@@ -174,48 +166,34 @@ export function Controls({
       <div className="flex items-center gap-2">
        
       {/*}
-        <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
           <Switch checked={tabScrollMode} onCheckedChange={onTabScrollModeChange} />
           <span>Scroll</span>
         </label>
         */}
-        <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
           <Switch checked={showFretboard} onCheckedChange={onShowFretboardChange} />
           <span>Fretboard</span>
         </label>
       
-        <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
           <Switch checked={countInEnabled} onCheckedChange={onCountInEnabledChange} />
           <span>Count-in</span>
         </label>
-        <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
           <Switch checked={showFretNotes} onCheckedChange={onShowFretNotesChange} />
           <span>Notes</span>
         </label>
         <button
           type="button"
           onClick={onResetAllToDefaults}
-          className="inline-flex items-center gap-1.5 rounded-full border border-bg-tertiary px-3 py-1 text-xs text-text-secondary hover:bg-bg-tertiary transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted transition-colors"
         >
           <RotateCcw size={12} />
          
         </button>
 
       </div>
-{/*}
-      <Select value={themeId} onValueChange={onThemeChange}>
-        <SelectTrigger size="sm" className="w-8 h-6 justify-center px-1.5" title="Theme">
-          <Palette className="h-4 w-4 shrink-0" />
-        </SelectTrigger>
-        <SelectContent>
-          {THEME_OPTIONS.map((opt) => (
-            <SelectItem key={opt.id} value={opt.id}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      */}
       </div>
     </div>
   );

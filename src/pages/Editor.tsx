@@ -70,7 +70,7 @@ const HEADER_ROW_HEIGHT = 24;
 /** Fixed height for the grid + bar header so string labels don't resize (header + 6 rows). */
 const GRID_FIXED_HEIGHT = HEADER_ROW_HEIGHT + NUM_STRINGS * ROW_HEIGHT;
 /** Space below the grid for the horizontal scrollbar so it doesn't overlap notes. */
-const GRID_SCROLLBAR_GAP = 8;
+const GRID_SCROLLBAR_GAP = 36;
 
 type StateTestNote = {
   id: string;
@@ -1575,16 +1575,16 @@ function StateTestGrid({
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden ">
       <div
-        className="flex shrink-0 border-b-4 border-bg-tertiary/60"
+        className="flex shrink-0 border-b-4 border-border/60"
         style={{ height: GRID_FIXED_HEIGHT + GRID_SCROLLBAR_GAP }}
       >
         {/* Left: time signature + string labels (fixed, no horizontal scroll) */}
         <div
-          className="shrink-0 flex flex-col border-r-6 border-bg-tertiary/60 pr-2 justify-start"
+          className="shrink-0 flex flex-col border-r-6 border-border/60 pr-2 justify-start"
           style={{ width: STRING_LABEL_WIDTH }}
         >
           <div
-            className="flex items-center justify-end text-text-secondary text-xs font-medium"
+            className="flex items-center justify-end text-muted-foreground text-xs font-medium"
             style={{ height: HEADER_ROW_HEIGHT }}
           >
             {timeSignature.num}/{timeSignature.denom}
@@ -1592,7 +1592,7 @@ function StateTestGrid({
           {stringLabels.slice(0, TEST_ROWS).map((label, r) => (
             <div
               key={r}
-              className="flex items-center justify-end text-text-secondary text-xs font-medium"
+              className="flex items-center justify-end text-muted-foreground text-xs font-medium"
               style={{ height: ROW_HEIGHT }}
             >
               {label}
@@ -1610,7 +1610,7 @@ function StateTestGrid({
           >
             {/* Bar/measure numbers row with beat lines */}
             <div
-              className="flex border-b border-bg-tertiary/60"
+              className="flex border-b border-border/60"
               style={{ height: HEADER_ROW_HEIGHT }}
             >
               {Array.from({ length: Math.ceil(totalColumns / subsPerBar) }, (_, i) => {
@@ -1622,7 +1622,7 @@ function StateTestGrid({
                 return (
                   <div
                     key={i}
-                    className="relative flex items-center justify-start text-text-secondary text-md font-medium border-l-2 border-bg-tertiary/60 first:border-l-0"
+                    className="relative flex items-center justify-start text-muted-foreground text-md font-medium border-l-2 border-border/60 first:border-l-0"
                     style={{ width: span * COLUMN_WIDTH, minWidth: span * COLUMN_WIDTH }}
                   >
                     {/* Beat lines within the bar (lighter than bar boundary) */}
@@ -1704,7 +1704,7 @@ function StateTestGrid({
         {tupletRestPositions.map((pos, i) => (
           <div
             key={`rest-${i}`}
-            className="absolute pointer-events-none z-5 flex items-center justify-center text-text-secondary"
+            className="absolute pointer-events-none z-5 flex items-center justify-center text-muted-foreground"
             style={{
               left: pos.leftPx,
               top: pos.topPx,
@@ -1723,7 +1723,7 @@ function StateTestGrid({
           Array.from({ length: totalColumns + 1 }, (_, c) => (
             <div
               key={`dot-${r}-${c}`}
-              className="absolute rounded-full bg-bg-tertiary/80"
+              className="absolute rounded-full bg-muted/80"
               style={{
                 width: 4,
                 height: 4,
@@ -2268,7 +2268,7 @@ function StateTestGrid({
         </Button>
       
       </div>
-      <div className="text-sm text-text-secondary max-w-3xl mx-auto"> 
+      <div className="text-sm text-muted-foreground max-w-3xl mx-auto"> 
         <div className="grid grid-cols-4 gap-2">
           <div className="col-span-2">
             <ul>
@@ -3153,14 +3153,14 @@ export function Editor() {
 
   if (!riff) {
     return (
-      <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary p-6">
+      <div className="min-h-screen flex flex-col bg-background text-foreground p-6">
         <a href="#/" className="text-accent hover:underline mb-4">← Back</a>
-        <p className="text-text-secondary">No riff selected. Create one or pick from the list.</p>
+        <p className="text-muted-foreground">No riff selected. Create one or pick from the list.</p>
         <div className="mt-4 flex gap-2">
           <select
             value={riffId}
             onChange={(e) => setRiffId(e.target.value)}
-            className="bg-bg-secondary border border-bg-tertiary rounded px-3 py-2"
+            className="bg-secondary border border-border rounded px-3 py-2"
           >
             {list.map((r) => (
               <option key={r.id} value={r.id}>{r.name}</option>
@@ -3173,7 +3173,8 @@ export function Editor() {
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden overscroll-none bg-bg-primary text-text-primary"
+      data-editor-section="editor-root"
+      className="h-screen flex flex-col overflow-hidden overscroll-none bg-primary text-foreground"
       onMouseDown={(e) => {
         const target = e.target as HTMLElement;
         const inGrid = target.closest('[data-grid-editor="grid"]');
@@ -3195,6 +3196,7 @@ export function Editor() {
       }}
     >
       <EditorHeader
+        data-editor-section="editor-header"
         riff={riff}
         riffId={riffId}
         riffList={list}
@@ -3215,10 +3217,18 @@ export function Editor() {
         showBackButton={false}
       />
 
-      <main className="flex-1 min-h-0 flex flex-col py-4 pb-24 overflow-hidden overscroll-none">
-        <div className="flex flex-col flex-1 min-h-0 gap-4">
-     
-          <div className="flex flex-col flex-1 min-h-0">
+      <main
+        data-editor-section="editor-main"
+        className="flex-1 min-h-0 flex flex-col py-4 pb-24 overflow-hidden overscroll-none"
+      >
+        <div
+          data-editor-section="editor-grid-shell"
+          className="flex flex-col flex-1 min-h-0 gap-4"
+        >
+          <div
+            data-editor-section="editor-grid"
+            className="flex flex-col flex-1 min-h-0"
+          >
             <StateTestGrid
               totalColumns={totalColumns}
               subsPerBar={subsPerBar}
