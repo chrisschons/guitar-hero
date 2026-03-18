@@ -80,6 +80,18 @@ const MINOR_BOX_START: Record<number, BoxStart> = {
   11: { position: 4, fret: 2 }, // B
 };
 
+const CAGED_SHAPE_NAME_BY_POS: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: 'E',
+  2: 'D',
+  3: 'C',
+  4: 'A',
+  5: 'G',
+};
+
+function cagedShapeLabel(pos: 1 | 2 | 3 | 4 | 5): string {
+  return `${CAGED_SHAPE_NAME_BY_POS[pos]}-Shape (pattern ${pos})`;
+}
+
 function asNotePairs(notes: unknown): [number, number][] {
   if (!Array.isArray(notes)) return [];
   return (notes as unknown[]).flatMap((n) => {
@@ -451,7 +463,7 @@ export function Scales() {
                         <PositionDiagram
                           key={`neutral-major-${position}`}
                           notes={notes}
-                          title={`Major box ${position}`}
+                          title={cagedShapeLabel(position as 1 | 2 | 3 | 4 | 5)}
                           rootSemitone={neutralRootSemitone}
                           tuning={STANDARD_TUNING}
                           showFretNumbers={false}
@@ -468,7 +480,7 @@ export function Scales() {
                     <PositionDiagram
                       key={`major-${canonicalPos}-${idx}`}
                       notes={notes}
-                      title={`Pos ${canonicalPos}`}
+                      title={cagedShapeLabel(canonicalPos)}
                       rootSemitone={rootSemitone}
                       tuning={mapperTuning}
                     />
@@ -491,7 +503,7 @@ export function Scales() {
                         <PositionDiagram
                           key={`neutral-minor-${position}`}
                           notes={notes}
-                          title={`Minor box ${position}`}
+                          title={cagedShapeLabel(position as 1 | 2 | 3 | 4 | 5)}
                           rootSemitone={neutralRootSemitone}
                           tuning={STANDARD_TUNING}
                           showFretNumbers={false}
@@ -509,7 +521,7 @@ export function Scales() {
                     <PositionDiagram
                       key={`minor-${canonicalPos}-${idx}`}
                       notes={notes}
-                      title={`Pos ${canonicalPos}`}
+                      title={cagedShapeLabel(canonicalPos)}
                       rootSemitone={rootSemitone}
                       tuning={mapperTuning}
                     />
