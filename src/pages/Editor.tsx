@@ -2683,12 +2683,18 @@ export function Editor() {
   const [smoothColumn, setSmoothColumn] = useState(0);
   const getNoteInfo = useMemo(() => buildNoteLookup(effectiveRiff), [effectiveRiff]);
   const { playColumnWithDuration, stopAllSustained } = useNoteTones(isPlaying, 0.3, STANDARD_TUNING);
+  const lastColumnRef = useRef<number | null>(null);
   const handleTick = useCallback(() => {
     if (!isPlaying) return;
     playbackOnTick();
     const slotIndex = getActiveNoteIndex();
     const column = getCurrentColumn();
-    if (column) {
+    if (typeof column === 'number') {
+      const prevCol = lastColumnRef.current;
+      // Detect loop wrap (column index jumped backwards) and stop any sustained notes.
+      if (prevCol != null && column < prevCol) {
+        stopAllSustained();
+      }
       const noteInfoPerString: { fret: number; duration: number; startSlot: number; onsetSlot?: number }[][] = [
         getNoteInfo(slotIndex, 0),
         getNoteInfo(slotIndex, 1),
@@ -2701,8 +2707,9 @@ export function Editor() {
         ? 60 / (bpm * Math.max(1, Math.round(subsPerBar / timeSignature.num)))
         : 60 / (bpm * 4);
       playColumnWithDuration(slotIndex, column, noteInfoPerString, slotDurationSec);
+      lastColumnRef.current = column;
     }
-  }, [isPlaying, playbackOnTick, getActiveNoteIndex, getCurrentColumn, getNoteInfo, playColumnWithDuration, bpm, subsPerBar, timeSignature]);
+  }, [isPlaying, playbackOnTick, getActiveNoteIndex, getCurrentColumn, getNoteInfo, playColumnWithDuration, stopAllSustained, bpm, subsPerBar, timeSignature]);
   const handleBeat = useCallback(() => {}, []);
   const handleCountIn = useCallback(() => {}, []);
   const timeSignatureId = `${timeSignature.num}/${timeSignature.denom}`;
@@ -2722,6 +2729,7 @@ export function Editor() {
     setIsPlaying((p) => {
       if (p) stopAllSustained();
       else resumeAudioContext(); // resume on Play so first tick has running context
+      lastColumnRef.current = null;
       return !p;
     });
   }, [stopAllSustained]);
@@ -2729,6 +2737,7 @@ export function Editor() {
     stopAllSustained();
     playbackReset();
     metronomeReset();
+    lastColumnRef.current = null;
     setSmoothColumn(0);
     gridScrollContainerRef.current?.scrollTo(0, 0);
   }, [playbackReset, metronomeReset, stopAllSustained]);

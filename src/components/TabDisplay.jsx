@@ -94,7 +94,7 @@ export function TabDisplay({
       {showBeatIndicator && (
       <div
         data-editor-section="tab-display-beat-indicator"
-        className="absolute top-2 left-0 right-0 flex justify-center items-center h-6 z-20"
+        className="fixed top-14 left-0 right-0 flex justify-center items-center h-6 z-20"
       >
         <div className="flex gap-2">
           {Array.from({ length: beatsPerBarDots }, (_, beat) => beat).map((beat) => {

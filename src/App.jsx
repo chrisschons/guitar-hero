@@ -108,6 +108,7 @@ function App() {
   const { playColumn } = useNoteTones(isPlaying, 1, tuning);
 
   const handleTick = useCallback(() => {
+    // First tick after count-in switches visuals into regular beat mode.
     setCountIn(0);
     exerciseOnTick();
 
