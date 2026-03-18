@@ -144,7 +144,7 @@ export function Controls({
         </Select>
       )}
 
-{/*
+
       <div className="hidden md:flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Click</span>
         <Slider
@@ -158,7 +158,7 @@ export function Controls({
           step={0.05}
           className="w-[60px]"
         />
-      </div>*/}
+      </div>
       </div>
 
       {/* Right: Reset all, Scroll, Fretboard, Count-in, Theme */}

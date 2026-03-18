@@ -20,7 +20,8 @@ export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING) 
     (column) => {
       if (volume === 0 || !column || !Array.isArray(column)) return;
       const ctx = getAudioContext();
-      const play = () => playColumnEngine(ctx, column, tuning, volume * 0.2);
+      // Boost note volume slightly relative to metronome so guitar feels more present.
+      const play = () => playColumnEngine(ctx, column, tuning, volume * 0.3);
       if (ctx.state === 'suspended') {
         resumeAudioContext().then(play);
       } else {
@@ -41,7 +42,7 @@ export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING) 
           column,
           noteInfoPerString,
           tuning,
-          volume * 0.2,
+          volume * 0.3,
           activeSustainedRef.current,
           slotDurationSec
         );

@@ -248,7 +248,7 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-secondary text-foreground">
+    <div className="min-h-screen flex flex-col bg-bg-secondary text-foreground overscroll-none">
       {/* Toolbar at top, full width, sticky */}
       <div className="sticky top-0 z-10 w-full bg-secondary border-b border-border shrink-0">
         <Controls

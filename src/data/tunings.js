@@ -21,7 +21,7 @@ export const C_STANDARD_TUNING = [C, G, Eb, Bb, F, C];
 
 export const TUNINGS = {
   standard: { id: 'standard', name: 'Standard', semitones: STANDARD_TUNING },
-  dropC: { id: 'dropC', name: 'Drop C', semitones: DROP_C_TUNING },
+  // dropC: { id: 'dropC', name: 'Drop C', semitones: DROP_C_TUNING }, // hidden for now; future enhancement
   cStandard: { id: 'cStandard', name: 'C Standard', semitones: C_STANDARD_TUNING },
 };
 
