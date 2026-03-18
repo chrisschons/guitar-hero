@@ -36,6 +36,17 @@ const MAJOR_BOX_OFFSETS: Record<1 | 2 | 3 | 4 | 5, number> = {
   5: 3, // 5→1
 };
 
+const MINOR_BOX_OFFSETS: Record<1 | 2 | 3 | 4 | 5, number> = {
+  // Minor position reference correction:
+  // their p1 -> our p4, their p2 -> our p5 (rotated numbering).
+  // Their minor offsets: 2 3 2 2 3 are applied after remapping positions.
+  1: 3, // 1→2 (compensates the 5→1 fix)
+  2: 2, // 2→3
+  3: 3, // 3→4
+  4: 2, // 4→5
+  5: 2, // 5→1 (fixed +1 fret drift)
+};
+
 const MAJOR_BOX_START: Record<number, BoxStart> = {
   0: { position: 3, fret: 0 }, // C
   1: { position: 3, fret: 1 }, // C#
@@ -49,6 +60,24 @@ const MAJOR_BOX_START: Record<number, BoxStart> = {
   9: { position: 5, fret: 1 }, // A
   10: { position: 4, fret: 0 }, // A#
   11: { position: 4, fret: 1 }, // B
+};
+
+const MINOR_BOX_START: Record<number, BoxStart> = {
+  // Your provided table (pitch class → start position/fret)
+  // Position remap implied by: their p1 -> our p4, their p2 -> our p5
+  // (rotation by +3): their p3 -> our p1, their p4 -> our p2, their p5 -> our p3.
+  0: { position: 3, fret: 0 }, // C (their p5 -> our p3)
+  1: { position: 3, fret: 1 }, // C#
+  2: { position: 2, fret: 0 }, // D (their p4 -> our p2)
+  3: { position: 2, fret: 1 }, // D#
+  4: { position: 2, fret: 2 }, // E
+  5: { position: 1, fret: 0 }, // F (their p3 -> our p1)
+  6: { position: 1, fret: 1 }, // F#
+  7: { position: 5, fret: 0 }, // G (their p2 -> our p5)
+  8: { position: 5, fret: 1 }, // G#
+  9: { position: 4, fret: 0 }, // A (their p1 -> our p4)
+  10: { position: 4, fret: 1 }, // A#
+  11: { position: 4, fret: 2 }, // B
 };
 
 function asNotePairs(notes: unknown): [number, number][] {
@@ -316,12 +345,39 @@ export function Scales() {
     }
     return order;
   })();
-  const mapperMinorNotesByPos = mapCagedPositionSet(
-    MINOR_CAGED_POSITIONS,
-    rootSemitone,
-    mapperMinorPitchSet,
-    mapperTuning
-  );
+  const mapperMinorNotesByPos = (() => {
+    const pc = ((rootSemitone % 12) + 12) % 12;
+    const start = MINOR_BOX_START[pc];
+    if (!start) {
+      return mapCagedPositionSet(
+        MINOR_CAGED_POSITIONS,
+        rootSemitone,
+        mapperMinorPitchSet,
+        mapperTuning
+      );
+    }
+    return mapCagedPositionSet(
+      MINOR_CAGED_POSITIONS,
+      rootSemitone,
+      mapperMinorPitchSet,
+      mapperTuning,
+      start,
+      MINOR_BOX_OFFSETS
+    );
+  })();
+
+  const mapperMinorOrder: (1 | 2 | 3 | 4 | 5)[] = (() => {
+    const pc = ((rootSemitone % 12) + 12) % 12;
+    const start = MINOR_BOX_START[pc];
+    if (!start) return [1, 2, 3, 4, 5];
+    const order: (1 | 2 | 3 | 4 | 5)[] = [];
+    let pos = start.position;
+    for (let i = 0; i < 5; i += 1) {
+      order.push(pos);
+      pos = ((pos % 5) + 1) as 1 | 2 | 3 | 4 | 5;
+    }
+    return order;
+  })();
 
   const neutralMajorNotesByPos = mapCagedPositionSet(
     MAJOR_CAGED_POSITIONS,
@@ -446,13 +502,14 @@ export function Scales() {
                   </div>
                 
               <div className="flex flex-wrap gap-4 justify-start">
-                {[1, 2, 3, 4, 5].map((position) => {
-                  const notes = mapperMinorNotesByPos[position - 1] ?? [];
+                {mapperMinorNotesByPos.map((notes, idx) => {
+                  const canonicalPos =
+                    mapperMinorOrder[idx] ?? ((idx + 1) as 1 | 2 | 3 | 4 | 5);
                   return (
                     <PositionDiagram
-                      key={`minor-${position}`}
+                      key={`minor-${canonicalPos}-${idx}`}
                       notes={notes}
-                      title={`Pos ${position}`}
+                      title={`Pos ${canonicalPos}`}
                       rootSemitone={rootSemitone}
                       tuning={mapperTuning}
                     />
