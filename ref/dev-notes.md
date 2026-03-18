@@ -90,6 +90,15 @@
       - Paste each group back as a proper tuplet while also pasting non-tuplet notes alongside.
     - Keep underlying riff model and grid model in sync for mixed-group pastes.
 
+- **Tuplets & duplication**
+  - Today:
+    - Duplicate (Cmd/Ctrl + D or toolbar button) is allowed only when the selection contains **no** `rhythmGroupId` notes and would not overlap any existing tuplet cells in the duplicate region.
+    - If duplication would touch a tuplet (either in the selection or in the target area), it is silently disallowed.
+  - Future:
+    - Implement full tuplet-aware duplication:
+      - Duplicate entire tuplet groups as units, preserving their `rhythmGroupId` and `tupletRatio`.
+      - Safely carve or shift any overlapping non-tuplet notes in the target region without breaking tuplet spans.
+
 - **Split duration vs underlying riff model**
   - `StateTestGrid` now:
     - Splits selected duration notes into per-slot notes.
