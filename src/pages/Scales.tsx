@@ -121,6 +121,42 @@ function minorPitchSet(rootSemitone: number): PitchSet {
   return new Set([0, 2, 3, 5, 7, 8, 10].map((i) => (i + rootSemitone) % 12));
 }
 
+function pentatonicPitchSet(rootSemitone: number): PitchSet {
+  return new Set([0, 3, 5, 7, 10].map((i) => (i + rootSemitone) % 12));
+}
+
+function bluesPitchSet(rootSemitone: number): PitchSet {
+  return new Set([0, 3, 5, 6, 7, 10].map((i) => (i + rootSemitone) % 12));
+}
+
+function transposeFrets(
+  positions: any[],
+  deltaSemitones: number
+): [number, number][][] {
+  // Base positions are hardcoded in C standard tuning for root A (fret coords),
+  // so transposition is a simple fret shift.
+  return positions.map((pos: any) =>
+    (pos as any[])
+      .map((note: any) => [note[0], note[1] + deltaSemitones] as [number, number])
+      .filter(([, fret]) => Number.isFinite(fret) && fret >= 0 && fret <= 23)
+  );
+}
+
+function chooseBestDeltaForPositions(basePositions: any[], deltaSemitones: number): number {
+  const candidates = [deltaSemitones, deltaSemitones - 12];
+  let bestDelta = candidates[0];
+  let bestScore = -1;
+  for (const d of candidates) {
+    const transposed = transposeFrets(basePositions, d);
+    const score = transposed.reduce((sum, pos) => sum + pos.length, 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestDelta = d;
+    }
+  }
+  return bestDelta;
+}
+
 function getLowEAnchor(notes: [number, number][]): number | null {
   let anchor: number | null = null;
   for (const [stringIndex, fret] of notes) {
@@ -170,6 +206,24 @@ export function Scales() {
   const mapperMinorPitchSet = minorPitchSet(rootSemitone);
   const neutralMajorPitchSet = majorPitchSet(neutralRootSemitone);
   const neutralMinorPitchSet = minorPitchSet(neutralRootSemitone);
+
+  // Pentatonic + blues are stored as A-based neutral shapes in fret coordinates.
+  // To make them key-aware, transpose by the semitone delta from A to the selected root.
+  const semitoneDeltaFromA = ((rootSemitone - ROOT_SEMITONE_A) % 12 + 12) % 12;
+  const semitoneDeltaNeutral = ((neutralRootSemitone - ROOT_SEMITONE_A) % 12 + 12) % 12;
+
+  const pentatonicDeltaFromA = chooseBestDeltaForPositions(PENTATONIC_POSITIONS as any, semitoneDeltaFromA);
+  const bluesDeltaFromA = chooseBestDeltaForPositions(BLUES_POSITIONS as any, semitoneDeltaFromA);
+  const pentatonicDeltaNeutral = chooseBestDeltaForPositions(PENTATONIC_POSITIONS as any, semitoneDeltaNeutral);
+  const bluesDeltaNeutral = chooseBestDeltaForPositions(BLUES_POSITIONS as any, semitoneDeltaNeutral);
+
+  const pentatonicPositionsByKey = transposeFrets(PENTATONIC_POSITIONS as any, pentatonicDeltaFromA);
+  const bluesPositionsByKey = transposeFrets(BLUES_POSITIONS as any, bluesDeltaFromA);
+  const pentatonicNeutralPositions = transposeFrets(PENTATONIC_POSITIONS as any, pentatonicDeltaNeutral);
+  const bluesNeutralPositions = transposeFrets(BLUES_POSITIONS as any, bluesDeltaNeutral);
+
+  const pentatonicFullNotesByKey = fullFretboardScaleNotes(pentatonicPitchSet(rootSemitone));
+  const bluesFullNotesByKey = fullFretboardScaleNotes(bluesPitchSet(rootSemitone));
 
   function mapCagedPatternToNotes(
     patternRows: string[],
@@ -502,12 +556,12 @@ export function Scales() {
               <h3 className="text-sm font-semibold text-foreground mb-2">Pentatonic minor</h3>
             
               <div className="flex flex-wrap gap-4 justify-start">
-                {PENTATONIC_POSITIONS.map((notes, idx) => (
+                {pentatonicNeutralPositions.map((notes, idx) => (
                   <PositionDiagram
                     key={idx}
-                    notes={asNotePairs(notes)}
+                    notes={notes}
                     title={`Position ${idx + 1}`}
-                    rootSemitone={ROOT_SEMITONE_A}
+                    rootSemitone={neutralRootSemitone}
                     showFretNumbers={false}
                     showNoteLabels={false}
                   />
@@ -519,12 +573,12 @@ export function Scales() {
               <h3 className="text-sm font-semibold text-foreground mb-2">Blues minor</h3>
              
               <div className="flex flex-wrap gap-4 justify-start">
-                {BLUES_POSITIONS.map((notes, idx) => (
+                {bluesNeutralPositions.map((notes, idx) => (
                   <PositionDiagram
                     key={idx}
-                    notes={asNotePairs(notes)}
+                    notes={notes}
                     title={`Position ${idx + 1}`}
-                    rootSemitone={ROOT_SEMITONE_A}
+                    rootSemitone={neutralRootSemitone}
                     showFretNumbers={false}
                     showNoteLabels={false}
                   />
@@ -637,50 +691,52 @@ export function Scales() {
             <hr className="my-8 border-border" />
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold text-foreground mb-3">A minor pentatonic</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">
+            {rootId} minor pentatonic
+          </h2>
           <p className="text-xs text-muted-foreground mb-2">
-            Full fretboard for A minor pentatonic (A, C, D, E, G), then the 5 hardcoded positions.
+            Full fretboard for {rootId} minor pentatonic, then the 5 hardcoded positions.
           </p>
           <div className="mb-4">
             <PositionDiagram
-              notes={fullFretboardScaleNotes(A_PENTATONIC_PITCHES)}
-              title="A minor pentatonic — full fretboard"
+              notes={pentatonicFullNotesByKey}
+              title={`${rootId} minor pentatonic — full fretboard`}
               fullScale
-              rootSemitone={ROOT_SEMITONE_A}
+              rootSemitone={rootSemitone}
             />
           </div>
           <div className="flex flex-wrap gap-4 justify-start">
-            {PENTATONIC_POSITIONS.map((notes, idx) => (
+            {pentatonicPositionsByKey.map((notes, idx) => (
               <PositionDiagram
                 key={idx}
-                notes={asNotePairs(notes)}
+                notes={notes}
                 title={`Position ${idx + 1}`}
-                rootSemitone={ROOT_SEMITONE_A}
+                rootSemitone={rootSemitone}
               />
             ))}
           </div>
         </section>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold text-foreground mb-3">A blues</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">{rootId} blues</h2>
           <p className="text-xs text-muted-foreground mb-2">
-            Full fretboard for A blues (A, C, D, D♯, E, G), then the 5 hardcoded positions.
+            Full fretboard for {rootId} blues, then the 5 hardcoded positions.
           </p>
           <div className="mb-4">
             <PositionDiagram
-              notes={fullFretboardScaleNotes(A_BLUES_PITCHES)}
-              title="A blues — full fretboard"
+              notes={bluesFullNotesByKey}
+              title={`${rootId} blues — full fretboard`}
               fullScale
-              rootSemitone={ROOT_SEMITONE_A}
+              rootSemitone={rootSemitone}
             />
           </div>
           <div className="flex flex-wrap gap-4 justify-start">
-            {BLUES_POSITIONS.map((notes, idx) => (
+            {bluesPositionsByKey.map((notes, idx) => (
               <PositionDiagram
                 key={idx}
-                notes={asNotePairs(notes)}
+                notes={notes}
                 title={`Position ${idx + 1}`}
-                rootSemitone={ROOT_SEMITONE_A}
+                rootSemitone={rootSemitone}
               />
             ))}
           </div>
