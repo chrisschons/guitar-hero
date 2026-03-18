@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Footer } from '../components/Footer';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/Select';
 import { PENTATONIC_POSITIONS, BLUES_POSITIONS } from '../data/exerciseTypes';
 import {
   C_MAJOR_3NPS_POSITIONS,
@@ -12,14 +13,54 @@ import {
 import {
   getMajorFirstNPositionNotes,
 } from '../data/neutral3NPS';
+import { MAJOR_CAGED_POSITIONS, MINOR_CAGED_POSITIONS } from '../data/scaleCagedPositions';
 import { PositionDiagram } from '../components/PositionDiagram';
 import { getNoteAt, ROOT_SEMITONES, NOTE_NAMES } from '../core/music';
-import { STANDARD_TUNING } from '../data/tunings';
+import { STANDARD_TUNING, TUNINGS_LIST } from '../data/tunings';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 const ROOT_SEMITONE_A = 9;
 
 type PitchSet = Set<number>;
+
+type BoxStart = {
+  position: 1 | 2 | 3 | 4 | 5;
+  fret: number;
+};
+
+const MAJOR_BOX_OFFSETS: Record<1 | 2 | 3 | 4 | 5, number> = {
+  1: 2, // 1→2
+  2: 3, // 2→3
+  3: 2, // 3→4
+  4: 2, // 4→5
+  5: 3, // 5→1
+};
+
+const MAJOR_BOX_START: Record<number, BoxStart> = {
+  0: { position: 3, fret: 0 }, // C
+  1: { position: 3, fret: 1 }, // C#
+  2: { position: 3, fret: 2 }, // D
+  3: { position: 2, fret: 0 }, // D#
+  4: { position: 2, fret: 1 }, // E
+  5: { position: 1, fret: 0 }, // F
+  6: { position: 1, fret: 1 }, // F#
+  7: { position: 2, fret: 4 }, // G
+  8: { position: 5, fret: 0 }, // G#
+  9: { position: 5, fret: 1 }, // A
+  10: { position: 4, fret: 0 }, // A#
+  11: { position: 4, fret: 1 }, // B
+};
+
+function asNotePairs(notes: unknown): [number, number][] {
+  if (!Array.isArray(notes)) return [];
+  return (notes as unknown[]).flatMap((n) => {
+    if (!Array.isArray(n) || n.length < 2) return [];
+    const a = Number(n[0]);
+    const b = Number(n[1]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return [];
+    return [[a, b] as [number, number]];
+  });
+}
 
 function fullFretboardScaleNotes(pitchSet: PitchSet, tuning = STANDARD_TUNING): [number, number][] {
   const notes: [number, number][] = [];
@@ -69,10 +110,14 @@ const A_MINOR_FULL_NOTES: [number, number][] = fullFretboardScaleNotes(
 
 export function Scales() {
   const [rootId, setRootId] = useLocalStorage('guitar-hero-debug-root', 'C');
-  const [scaleTab, setScaleTab] = useState<'major' | 'minor'>('major');
+  const [scaleTab, setScaleTab] = useState<'mapper' | 'major' | 'minor'>('major');
   const [showCanonicalMajor, setShowCanonicalMajor] = useState(false);
   const [showCanonicalMinor, setShowCanonicalMinor] = useState(false);
+  const [mapperTuningId, setMapperTuningId] = useLocalStorage('guitar-hero-scale-mapper-tuning', 'standard');
   const rootSemitone = ROOT_SEMITONES[rootId] ?? 0;
+  const neutralRootSemitone = ROOT_SEMITONES.C ?? 0;
+
+  const mapperTuning = TUNINGS_LIST.find((t) => t.id === mapperTuningId)?.semitones ?? STANDARD_TUNING;
 
   const majorFullNotes = fullFretboardScaleNotes(majorPitchSet(rootSemitone));
   const minorFullNotes = fullFretboardScaleNotes(minorPitchSet(rootSemitone));
@@ -80,14 +125,223 @@ export function Scales() {
   const minorPositions = getMinor3NPSPositions(rootSemitone);
   const majorOrder = get3NPSStartingOrder(rootSemitone, 'major');
   const minorOrder = get3NPSStartingOrder(rootSemitone, 'minor');
-  const majorFirstSevenNotes = getMajorFirstNPositionNotes(rootSemitone, 7).flat();
-  const minorFirstSevenNotes = minorPositions.flat();
+  const majorFirstSevenNotes = asNotePairs(getMajorFirstNPositionNotes(rootSemitone, 7).flat());
+  const minorFirstSevenNotes = asNotePairs(minorPositions.flat());
+  const mapperMajorPitchSet = majorPitchSet(rootSemitone);
+  const mapperMinorPitchSet = minorPitchSet(rootSemitone);
+  const neutralMajorPitchSet = majorPitchSet(neutralRootSemitone);
+  const neutralMinorPitchSet = minorPitchSet(neutralRootSemitone);
+
+  function mapCagedPatternToNotes(
+    patternRows: string[],
+    rootPc: number,
+    scalePitchSet: PitchSet,
+    tuning = STANDARD_TUNING,
+    explicitBaseFret: number | null = null,
+    minBaseFret: number | null = null
+  ): [number, number][] {
+    const rows = patternRows.slice(0, 6);
+    const maxCols =
+      rows.reduce((max, r) => (typeof r === 'string' ? Math.max(max, r.length) : max), 0) || 0;
+    // Prefer anchoring off low string (5) if it contains an 'r', otherwise first row that has 'r'.
+    let anchorString = 5;
+    let anchorCol = rows[5]?.indexOf('r') ?? -1;
+    if (anchorCol < 0) {
+      for (let s = 5; s >= 0; s -= 1) {
+        const idx = rows[s]?.indexOf('r') ?? -1;
+        if (idx >= 0) {
+          anchorString = s;
+          anchorCol = idx;
+          break;
+        }
+      }
+    }
+    if (anchorCol < 0) anchorCol = 0;
+
+    let baseFret = 0;
+    if (explicitBaseFret != null) {
+      baseFret = explicitBaseFret;
+    } else {
+      const candidates: { rootFret: number; baseFret: number; boxMin: number; boxMax: number }[] = [];
+      for (let fret = 0; fret <= 23; fret += 1) {
+        const pitch = getNoteAt(anchorString, fret, tuning);
+        if (pitch !== rootPc) continue;
+        const bf = fret - anchorCol;
+        const boxMin = bf;
+        const boxMax = bf + maxCols - 1;
+        candidates.push({ rootFret: fret, baseFret: bf, boxMin, boxMax });
+      }
+
+      if (candidates.length === 0) {
+        baseFret = 0;
+      } else {
+        // Default: pick the lowest non-negative baseFret (keeps Position 1 correct, e.g. C at fret 0).
+        const nonNegative = candidates
+          .filter((c) => c.baseFret >= 0)
+          .sort((a, b) => a.baseFret - b.baseFret);
+
+        // When mapping a sequence of boxes, keep them from wrapping backwards by enforcing a minimum.
+        const meetsMin =
+          minBaseFret == null
+            ? nonNegative
+            : nonNegative.filter((c) => c.baseFret >= minBaseFret);
+
+        if (meetsMin.length) {
+          baseFret = meetsMin[0].baseFret;
+        } else if (nonNegative.length) {
+          baseFret = nonNegative[0].baseFret;
+        } else {
+          // Fallback: everything is negative (rare); pick the highest (closest to 0).
+          baseFret = candidates.reduce(
+            (best, c) => Math.max(best, c.baseFret),
+            candidates[0].baseFret
+          );
+        }
+      }
+    }
+
+    const notes: [number, number][] = [];
+    for (let s = 0; s < 6; s += 1) {
+      const row = rows[s] ?? '';
+      for (let c = 0; c < maxCols; c += 1) {
+        const ch = row[c] ?? '-';
+        if (ch === '-') continue;
+        const fret = baseFret + c;
+        if (fret < 0 || fret > 23) continue;
+        const pitch = getNoteAt(s, fret, tuning);
+        if (ch === 'r') {
+          notes.push([s, fret]);
+          continue;
+        }
+        // Only include if it matches the scale pitch set.
+        if (scalePitchSet.has(pitch)) {
+          notes.push([s, fret]);
+        }
+      }
+    }
+    return notes;
+  }
+
+  function mapCagedPositionSet(
+    patterns: Record<number, string[]>,
+    rootPc: number,
+    pitchSet: PitchSet,
+    tuning = STANDARD_TUNING,
+    boxStart?: BoxStart,
+    boxOffsets?: Record<1 | 2 | 3 | 4 | 5, number>
+  ): [number, number][][] {
+    const result: [number, number][][] = [];
+    let minBaseFret: number | null = null;
+
+    if (boxStart && boxOffsets) {
+      // Deterministic sequence using configured start (position, fret) and global offsets.
+      let currentPos = boxStart.position;
+      let currentFret = boxStart.fret;
+      for (let i = 0; i < 5; i += 1) {
+        const pattern = patterns[currentPos];
+        if (!pattern) {
+          result.push([]);
+        } else {
+          const notes = mapCagedPatternToNotes(
+            pattern,
+            rootPc,
+            pitchSet,
+            tuning,
+            currentFret,
+            minBaseFret
+          );
+          result.push(notes);
+          const frets = notes.map(([, f]) => f);
+          if (frets.length) {
+            const leftEdge = Math.min(...frets);
+            minBaseFret = leftEdge;
+          }
+        }
+        const offset = boxOffsets[currentPos] ?? 0;
+        currentFret += offset;
+        currentPos = ((currentPos % 5) + 1) as 1 | 2 | 3 | 4 | 5;
+      }
+      return result;
+    }
+
+    // Fallback: derive sequence only from root search and minBaseFret (legacy behavior).
+    for (const position of [1, 2, 3, 4, 5]) {
+      const pattern = patterns[position];
+      if (!pattern) {
+        result.push([]);
+        continue;
+      }
+      const notes = mapCagedPatternToNotes(pattern, rootPc, pitchSet, tuning, null, minBaseFret);
+      result.push(notes);
+      const frets = notes.map(([, f]) => f);
+      if (frets.length) {
+        // Ensure next position doesn't "wrap back" below this position's left edge.
+        const leftEdge = Math.min(...frets);
+        minBaseFret = leftEdge;
+      }
+    }
+    return result;
+  }
+
+  const mapperMajorNotesByPos = (() => {
+    const pc = ((rootSemitone % 12) + 12) % 12;
+    const start = MAJOR_BOX_START[pc];
+    if (!start) {
+      return mapCagedPositionSet(
+        MAJOR_CAGED_POSITIONS,
+        rootSemitone,
+        mapperMajorPitchSet,
+        mapperTuning
+      );
+    }
+    return mapCagedPositionSet(
+      MAJOR_CAGED_POSITIONS,
+      rootSemitone,
+      mapperMajorPitchSet,
+      mapperTuning,
+      start,
+      MAJOR_BOX_OFFSETS
+    );
+  })();
+
+  const mapperMajorOrder: (1 | 2 | 3 | 4 | 5)[] = (() => {
+    const pc = ((rootSemitone % 12) + 12) % 12;
+    const start = MAJOR_BOX_START[pc];
+    if (!start) return [1, 2, 3, 4, 5];
+    const order: (1 | 2 | 3 | 4 | 5)[] = [];
+    let pos = start.position;
+    for (let i = 0; i < 5; i += 1) {
+      order.push(pos);
+      pos = ((pos % 5) + 1) as 1 | 2 | 3 | 4 | 5;
+    }
+    return order;
+  })();
+  const mapperMinorNotesByPos = mapCagedPositionSet(
+    MINOR_CAGED_POSITIONS,
+    rootSemitone,
+    mapperMinorPitchSet,
+    mapperTuning
+  );
+
+  const neutralMajorNotesByPos = mapCagedPositionSet(
+    MAJOR_CAGED_POSITIONS,
+    neutralRootSemitone,
+    neutralMajorPitchSet,
+    STANDARD_TUNING
+  );
+  const neutralMinorNotesByPos = mapCagedPositionSet(
+    MINOR_CAGED_POSITIONS,
+    neutralRootSemitone,
+    neutralMinorPitchSet,
+    STANDARD_TUNING
+  );
 
   return (
     <div className="min-h-screen flex flex-col text-foreground relative">
       <header className="sticky top-0 z-20 w-full bg-secondary border-b border-border">
-        <Tabs defaultValue="major" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'major' | 'minor')} className="w-full p-0">
+        <Tabs defaultValue="mapper" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'mapper' | 'major' | 'minor')} className="w-full p-0">
           <TabsList variant="line" className="w-full justify-start rounded-none gap-0 bg-transparent px-6">
+          <TabsTrigger value="mapper" className="py-3">Mapper</TabsTrigger>
             <TabsTrigger value="major" className="py-3">Major Scale</TabsTrigger>
             <TabsTrigger value="minor" className="py-3">Minor Scale</TabsTrigger>
           </TabsList>
@@ -95,7 +349,118 @@ export function Scales() {
       </header>
 
       <div className="flex-1 p-6 pb-24 mx-auto w-full">
-        <Tabs defaultValue="major" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'major' | 'minor')} className="w-full">
+        
+        <Tabs defaultValue="mapper" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'mapper' | 'major' | 'minor')} className="w-full">
+           {/* Mapper Scale Tab */}
+           <TabsContent value="mapper" className="space-y-8">
+            <section className="mb-4">
+              <h2 className="text-xl font-semibold text-foreground mb-3">
+                New Mapping system
+              </h2>
+              <div className="flex flex-wrap gap-3 items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">Tuning:</span>
+                  <Select value={mapperTuningId} onValueChange={setMapperTuningId}>
+                    <SelectTrigger size="sm" className="min-w-[160px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TUNINGS_LIST.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                This tab uses a single mapper: pattern grid + (root key) + tuning → frets.
+                It’s intentionally simple and will be improved to support richer patterns (3NPS, pentatonic) with one shared engine.
+              </p>
+            </section>
+           
+            <section className="mb-8">
+              <h3 className="text-sm font-semibold text-foreground mb-2">
+                {rootId} major — positions 1–5
+              </h3>
+             
+                  <div className="text-xs font-semibold text-muted-foreground mb-4">
+                    Major boxes 1–5 (neutral patterns)
+                  </div>
+                  <div className="flex flex-wrap gap-4 justify-start mb-4">
+                    {[1, 2, 3, 4, 5].map((position) => {
+                      const notes = neutralMajorNotesByPos[position - 1] ?? [];
+                      return (
+                        <PositionDiagram
+                          key={`neutral-major-${position}`}
+                          notes={notes}
+                          title={`Major box ${position}`}
+                          rootSemitone={neutralRootSemitone}
+                          tuning={STANDARD_TUNING}
+                          showFretNumbers={false}
+                          showNoteLabels={false}
+                        />
+                      );
+                    })}
+                  </div>
+              
+              <div className="flex flex-wrap gap-4 justify-start">
+                {mapperMajorNotesByPos.map((notes, idx) => {
+                  const canonicalPos = mapperMajorOrder[idx] ?? ((idx + 1) as 1 | 2 | 3 | 4 | 5);
+                  return (
+                    <PositionDiagram
+                      key={`major-${canonicalPos}-${idx}`}
+                      notes={notes}
+                      title={`Pos ${canonicalPos}`}
+                      rootSemitone={rootSemitone}
+                      tuning={mapperTuning}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+            <section className="mb-8">
+              <h3 className="text-sm font-semibold text-foreground mb-2">
+                {rootId} natural minor — positions 1–5
+              </h3>
+           
+                  <div className="text-xs font-semibold text-muted-foreground mb-4">
+                    Natural minor boxes 1–5 (neutral patterns)
+                  </div>
+                  <div className="flex flex-wrap gap-4 justify-start mb-4">
+                    {[1, 2, 3, 4, 5].map((position) => {
+                      const notes = neutralMinorNotesByPos[position - 1] ?? [];
+                      return (
+                        <PositionDiagram
+                          key={`neutral-minor-${position}`}
+                          notes={notes}
+                          title={`Minor box ${position}`}
+                          rootSemitone={neutralRootSemitone}
+                          tuning={STANDARD_TUNING}
+                          showFretNumbers={false}
+                          showNoteLabels={false}
+                        />
+                      );
+                    })}
+                  </div>
+                
+              <div className="flex flex-wrap gap-4 justify-start">
+                {[1, 2, 3, 4, 5].map((position) => {
+                  const notes = mapperMinorNotesByPos[position - 1] ?? [];
+                  return (
+                    <PositionDiagram
+                      key={`minor-${position}`}
+                      notes={notes}
+                      title={`Pos ${position}`}
+                      rootSemitone={rootSemitone}
+                      tuning={mapperTuning}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+           </TabsContent>
           {/* Major Scale Tab */}
           <TabsContent value="major" className="space-y-8">
             <section className="mb-4">
@@ -116,7 +481,7 @@ export function Scales() {
                   {C_MAJOR_3NPS_POSITIONS.map((notes, idx) => (
                     <PositionDiagram
                       key={idx}
-                      notes={notes}
+                      notes={asNotePairs(notes)}
                       title={`Position ${idx + 1}`}
                       rootSemitone={ROOT_SEMITONES.C ?? 0}
                       showFretNumbers={false}
@@ -147,7 +512,6 @@ export function Scales() {
               <div className="mb-4">
                 <PositionDiagram
                   notes={majorFirstSevenNotes}
-                  extraNotes={majorFullNotes}
                   title={`${rootId} major 3NPS — positions 1–7 (neutral shapes)`}
                   fullScale
                   rootSemitone={rootSemitone}
@@ -159,8 +523,7 @@ export function Scales() {
                   return (
                     <PositionDiagram
                       key={idx}
-                      notes={notes}
-                      extraNotes={majorFullNotes}
+                      notes={asNotePairs(notes)}
                       title={`Position ${canonicalIndex + 1}`}
                       rootSemitone={rootSemitone}
                     />
@@ -220,7 +583,6 @@ export function Scales() {
               <div className="mb-4">
                 <PositionDiagram
                   notes={minorFirstSevenNotes}
-                  extraNotes={minorFullNotes}
                   title={`${rootId} natural minor 3NPS — positions 1–7`}
                   fullScale
                   rootSemitone={rootSemitone}
@@ -232,8 +594,7 @@ export function Scales() {
                   return (
                     <PositionDiagram
                       key={idx}
-                      notes={notes}
-                      extraNotes={minorFullNotes}
+                      notes={asNotePairs(notes)}
                       title={`Position ${canonicalIndex + 1}`}
                       rootSemitone={rootSemitone}
                     />
@@ -241,10 +602,7 @@ export function Scales() {
                 })}
               </div>
             </section>
-          </TabsContent>
-        </Tabs>
-
-        <hr className="my-8 border-border" />
+            <hr className="my-8 border-border" />
 
         <section className="mb-10">
           <h2 className="text-xl font-semibold text-foreground mb-3">A minor pentatonic</h2>
@@ -254,7 +612,6 @@ export function Scales() {
           <div className="mb-4">
             <PositionDiagram
               notes={fullFretboardScaleNotes(A_PENTATONIC_PITCHES)}
-              extraNotes={A_MINOR_FULL_NOTES}
               title="A minor pentatonic — full fretboard"
               fullScale
               rootSemitone={ROOT_SEMITONE_A}
@@ -264,8 +621,7 @@ export function Scales() {
             {PENTATONIC_POSITIONS.map((notes, idx) => (
               <PositionDiagram
                 key={idx}
-                notes={notes}
-                extraNotes={A_MINOR_FULL_NOTES}
+                notes={asNotePairs(notes)}
                 title={`Position ${idx + 1}`}
                 rootSemitone={ROOT_SEMITONE_A}
               />
@@ -281,7 +637,6 @@ export function Scales() {
           <div className="mb-4">
             <PositionDiagram
               notes={fullFretboardScaleNotes(A_BLUES_PITCHES)}
-              extraNotes={A_MINOR_FULL_NOTES}
               title="A blues — full fretboard"
               fullScale
               rootSemitone={ROOT_SEMITONE_A}
@@ -291,14 +646,17 @@ export function Scales() {
             {BLUES_POSITIONS.map((notes, idx) => (
               <PositionDiagram
                 key={idx}
-                notes={notes}
-                extraNotes={A_MINOR_FULL_NOTES}
+                notes={asNotePairs(notes)}
                 title={`Position ${idx + 1}`}
                 rootSemitone={ROOT_SEMITONE_A}
               />
             ))}
           </div>
         </section>
+          </TabsContent>
+        </Tabs>
+
+        
       </div>
 
       <Footer disableMetronome disableTransport keySelector={
@@ -322,4 +680,3 @@ export function Scales() {
     </div>
   );
 }
-
