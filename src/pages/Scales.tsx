@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Footer } from '../components/Footer';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/Select';
 import { PENTATONIC_POSITIONS, BLUES_POSITIONS } from '../data/exerciseTypes';
 import {
   C_MAJOR_3NPS_POSITIONS,
@@ -16,7 +15,7 @@ import {
 import { MAJOR_CAGED_POSITIONS, MINOR_CAGED_POSITIONS } from '../data/scaleCagedPositions';
 import { PositionDiagram } from '../components/PositionDiagram';
 import { getNoteAt, ROOT_SEMITONES, NOTE_NAMES } from '../core/music';
-import { STANDARD_TUNING, TUNINGS_LIST } from '../data/tunings';
+import { STANDARD_TUNING } from '../data/tunings';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 const ROOT_SEMITONE_A = 9;
@@ -151,14 +150,13 @@ const A_MINOR_FULL_NOTES: [number, number][] = fullFretboardScaleNotes(
 
 export function Scales() {
   const [rootId, setRootId] = useLocalStorage('guitar-hero-debug-root', 'C');
-  const [scaleTab, setScaleTab] = useState<'mapper' | 'major' | 'minor'>('major');
+  const [scaleTab, setScaleTab] = useState<'shapes' | 'major' | 'minor'>('shapes');
   const [showCanonicalMajor, setShowCanonicalMajor] = useState(false);
   const [showCanonicalMinor, setShowCanonicalMinor] = useState(false);
-  const [mapperTuningId, setMapperTuningId] = useLocalStorage('guitar-hero-scale-mapper-tuning', 'standard');
   const rootSemitone = ROOT_SEMITONES[rootId] ?? 0;
   const neutralRootSemitone = ROOT_SEMITONES.C ?? 0;
-
-  const mapperTuning = TUNINGS_LIST.find((t) => t.id === mapperTuningId)?.semitones ?? STANDARD_TUNING;
+  // Mapper tuning is fixed for now.
+  const mapperTuning = STANDARD_TUNING;
 
   const majorFullNotes = fullFretboardScaleNotes(majorPitchSet(rootSemitone));
   const minorFullNotes = fullFretboardScaleNotes(minorPitchSet(rootSemitone));
@@ -407,9 +405,9 @@ export function Scales() {
   return (
     <div className="min-h-screen flex flex-col text-foreground relative">
       <header className="sticky top-0 z-20 w-full bg-secondary border-b border-border">
-        <Tabs defaultValue="mapper" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'mapper' | 'major' | 'minor')} className="w-full p-0">
+        <Tabs defaultValue="shapes" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'shapes' | 'major' | 'minor')} className="w-full p-0">
           <TabsList variant="line" className="w-full justify-start rounded-none gap-0 bg-transparent px-6">
-          <TabsTrigger value="mapper" className="py-3">Mapper</TabsTrigger>
+          <TabsTrigger value="shapes" className="py-3">Scale Shapes</TabsTrigger>
             <TabsTrigger value="major" className="py-3">Major Scale</TabsTrigger>
             <TabsTrigger value="minor" className="py-3">Minor Scale</TabsTrigger>
           </TabsList>
@@ -418,182 +416,166 @@ export function Scales() {
 
       <div className="flex-1 p-6 pb-24 mx-auto w-full">
         
-        <Tabs defaultValue="mapper" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'mapper' | 'major' | 'minor')} className="w-full">
+        <Tabs defaultValue="shapes" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'shapes' | 'major' | 'minor')} className="w-full">
            {/* Mapper Scale Tab */}
-           <TabsContent value="mapper" className="space-y-8">
+           <TabsContent value="shapes" className="space-y-8">
             <section className="mb-4">
-              <h2 className="text-xl font-semibold text-foreground mb-3">
-                New Mapping system
-              </h2>
-              <div className="flex flex-wrap gap-3 items-center">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium">Tuning:</span>
-                  <Select value={mapperTuningId} onValueChange={setMapperTuningId}>
-                    <SelectTrigger size="sm" className="min-w-[160px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TUNINGS_LIST.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-3">
-                This tab uses a single mapper: pattern grid + (root key) + tuning → frets.
-                It’s intentionally simple and will be improved to support richer patterns (3NPS, pentatonic) with one shared engine.
+              <h2 className="text-xl font-semibold text-foreground mb-3">Scale Shapes</h2>
+              <p className="text-xs text-muted-foreground">
+                Neutral (key-agnostic) examples: CAGED, 3NPS, pentatonic minor, and blues minor.
               </p>
             </section>
-           
-            <section className="mb-8">
-              <h3 className="text-sm font-semibold text-foreground mb-2">
-                {rootId} major — positions 1–5
-              </h3>
-             
-                  <div className="text-xs font-semibold text-muted-foreground mb-4">
-                    Major boxes 1–5 (neutral patterns)
-                  </div>
-                  <div className="flex flex-wrap gap-4 justify-start mb-4">
-                    {[1, 2, 3, 4, 5].map((position) => {
-                      const notes = neutralMajorNotesByPos[position - 1] ?? [];
-                      return (
-                        <PositionDiagram
-                          key={`neutral-major-${position}`}
-                          notes={notes}
-                          title={cagedShapeLabel(position as 1 | 2 | 3 | 4 | 5)}
-                          rootSemitone={neutralRootSemitone}
-                          tuning={STANDARD_TUNING}
-                          showFretNumbers={false}
-                          showNoteLabels={false}
-                        />
-                      );
-                    })}
-                  </div>
-              
-              <div className="flex flex-wrap gap-4 justify-start">
-                {mapperMajorNotesByPos.map((notes, idx) => {
-                  const canonicalPos = mapperMajorOrder[idx] ?? ((idx + 1) as 1 | 2 | 3 | 4 | 5);
+            
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">CAGED major</h3>
+              <div className="flex flex-wrap gap-4 justify-start mt-3">
+                {[1, 2, 3, 4, 5].map((position) => {
+                  const notes = neutralMajorNotesByPos[position - 1] ?? [];
                   return (
                     <PositionDiagram
-                      key={`major-${canonicalPos}-${idx}`}
+                      key={`neutral-major-${position}`}
                       notes={notes}
-                      title={cagedShapeLabel(canonicalPos)}
-                      rootSemitone={rootSemitone}
-                      tuning={mapperTuning}
+                      title={cagedShapeLabel(position as 1 | 2 | 3 | 4 | 5)}
+                      rootSemitone={neutralRootSemitone}
+                      tuning={STANDARD_TUNING}
+                      showFretNumbers={false}
+                      showNoteLabels={false}
                     />
                   );
                 })}
               </div>
             </section>
-            <section className="mb-8">
-              <h3 className="text-sm font-semibold text-foreground mb-2">
-                {rootId} natural minor — positions 1–5
-              </h3>
-           
-                  <div className="text-xs font-semibold text-muted-foreground mb-4">
-                    Natural minor boxes 1–5 (neutral patterns)
-                  </div>
-                  <div className="flex flex-wrap gap-4 justify-start mb-4">
-                    {[1, 2, 3, 4, 5].map((position) => {
-                      const notes = neutralMinorNotesByPos[position - 1] ?? [];
-                      return (
-                        <PositionDiagram
-                          key={`neutral-minor-${position}`}
-                          notes={notes}
-                          title={cagedShapeLabel(position as 1 | 2 | 3 | 4 | 5)}
-                          rootSemitone={neutralRootSemitone}
-                          tuning={STANDARD_TUNING}
-                          showFretNumbers={false}
-                          showNoteLabels={false}
-                        />
-                      );
-                    })}
-                  </div>
-                
-              <div className="flex flex-wrap gap-4 justify-start">
-                {mapperMinorNotesByPos.map((notes, idx) => {
-                  const canonicalPos =
-                    mapperMinorOrder[idx] ?? ((idx + 1) as 1 | 2 | 3 | 4 | 5);
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">3NPS Major</h3>
+              <div className="flex flex-wrap gap-3 justify-start mt-3">
+                {C_MAJOR_3NPS_POSITIONS.map((notes, idx) => (
+                  <PositionDiagram
+                    key={idx}
+                    notes={asNotePairs(notes)}
+                    title={`Position ${idx + 1}`}
+                    rootSemitone={ROOT_SEMITONES.C ?? 0}
+                    showFretNumbers={false}
+                    showNoteLabels={false}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">CAGED MINOR</h3>
+              <div className="flex flex-wrap gap-4 justify-start mt-3">
+                {[1, 2, 3, 4, 5].map((position) => {
+                  const notes = neutralMinorNotesByPos[position - 1] ?? [];
                   return (
                     <PositionDiagram
-                      key={`minor-${canonicalPos}-${idx}`}
+                      key={`neutral-minor-${position}`}
                       notes={notes}
-                      title={cagedShapeLabel(canonicalPos)}
-                      rootSemitone={rootSemitone}
-                      tuning={mapperTuning}
+                      title={cagedShapeLabel(position as 1 | 2 | 3 | 4 | 5)}
+                      rootSemitone={neutralRootSemitone}
+                      tuning={STANDARD_TUNING}
+                      showFretNumbers={false}
+                      showNoteLabels={false}
                     />
                   );
                 })}
+              </div>
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">3NPS minor</h3>
+              <div className="flex flex-wrap gap-3 justify-start mt-3">
+                {getMinor3NPSPositions(ROOT_SEMITONES.C ?? 0).map((notes, idx) => (
+                  <PositionDiagram
+                    key={idx}
+                    notes={asNotePairs(notes)}
+                    title={`Position ${idx + 1}`}
+                    rootSemitone={ROOT_SEMITONES.C ?? 0}
+                    showFretNumbers={false}
+                    showNoteLabels={false}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">Pentatonic minor</h3>
+            
+              <div className="flex flex-wrap gap-4 justify-start">
+                {PENTATONIC_POSITIONS.map((notes, idx) => (
+                  <PositionDiagram
+                    key={idx}
+                    notes={asNotePairs(notes)}
+                    title={`Position ${idx + 1}`}
+                    rootSemitone={ROOT_SEMITONE_A}
+                    showFretNumbers={false}
+                    showNoteLabels={false}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">Blues minor</h3>
+             
+              <div className="flex flex-wrap gap-4 justify-start">
+                {BLUES_POSITIONS.map((notes, idx) => (
+                  <PositionDiagram
+                    key={idx}
+                    notes={asNotePairs(notes)}
+                    title={`Position ${idx + 1}`}
+                    rootSemitone={ROOT_SEMITONE_A}
+                    showFretNumbers={false}
+                    showNoteLabels={false}
+                  />
+                ))}
               </div>
             </section>
            </TabsContent>
           {/* Major Scale Tab */}
           <TabsContent value="major" className="space-y-8">
-            <section className="mb-4">
-              <button
-                type="button"
-                onClick={() => setShowCanonicalMajor((prev) => !prev)}
-                className="flex items-center justify-between w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-              >
-                <span className="font-semibold text-muted-foreground">
-                  C Major 3NPS — canonical positions (1–7)
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {showCanonicalMajor ? 'Hide' : 'Show'}
-                </span>
-              </button>
-              {showCanonicalMajor && (
-                <div className="mt-3 flex flex-wrap gap-3 justify-start">
-                  {C_MAJOR_3NPS_POSITIONS.map((notes, idx) => (
-                    <PositionDiagram
-                      key={idx}
-                      notes={asNotePairs(notes)}
-                      title={`Position ${idx + 1}`}
-                      rootSemitone={ROOT_SEMITONES.C ?? 0}
-                      showFretNumbers={false}
-                      showNoteLabels={false}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
             <section className="mb-10">
-              <h2 className="text-xl font-semibold text-foreground mb-3">
-                {rootId} Major 3NPS
-              </h2>
-             
-              <p className="text-xs text-muted-foreground mb-2">
-                Full fretboard, then positions ordered by lowest fret (closest to nut first). Root
-                highlighted. Labels remain canonical (Position 1–7).
-              </p>
+              <h2 className="text-xl font-semibold text-foreground mb-3">{rootId} Major Scales</h2>
+
               <div className="mb-4">
                 <PositionDiagram
                   notes={majorFullNotes}
-                  title={`${rootId} major 3NPS — full fretboard`}
+                  title={`${rootId} major — full fretboard`}
                   fullScale
                   rootSemitone={rootSemitone}
                 />
               </div>
-              <div className="mb-4">
-                <PositionDiagram
-                  notes={majorFirstSevenNotes}
-                  title={`${rootId} major 3NPS — positions 1–7 (neutral shapes)`}
-                  fullScale
-                  rootSemitone={rootSemitone}
-                />
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">CAGED major shapes</h3>
+              <div className="flex flex-wrap gap-4 justify-start">
+                {mapperMajorNotesByPos.map((notes, idx) => {
+                  const canonicalPos =
+                    mapperMajorOrder[idx] ?? ((idx + 1) as 1 | 2 | 3 | 4 | 5);
+                  return (
+                    <PositionDiagram
+                      key={`major-caged-${canonicalPos}-${idx}`}
+                      notes={notes}
+                      title={cagedShapeLabel(canonicalPos)}
+                      rootSemitone={rootSemitone}
+                      tuning={mapperTuning}
+                    />
+                  );
+                })}
               </div>
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">3NPS major shapes</h3>
               <div className="flex flex-wrap gap-4 justify-start">
                 {majorPositions.map((notes, idx) => {
                   const canonicalIndex = majorOrder[idx] ?? idx;
                   return (
                     <PositionDiagram
-                      key={idx}
+                      key={`major-3nps-${canonicalIndex + 1}`}
                       notes={asNotePairs(notes)}
-                      title={`Position ${canonicalIndex + 1}`}
+                      title={`3NPS ${canonicalIndex + 1}`}
                       rootSemitone={rootSemitone}
                     />
                   );
@@ -604,67 +586,48 @@ export function Scales() {
 
           {/* Minor Scale Tab */}
           <TabsContent value="minor" className="space-y-8">
-            <section className="mb-4">
-              <button
-                type="button"
-                onClick={() => setShowCanonicalMinor((prev) => !prev)}
-                className="flex items-center justify-between w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-              >
-                <span className="font-semibold text-muted-foreground">
-                  C Natural Minor 3NPS — canonical positions (1–7)
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {showCanonicalMinor ? 'Hide' : 'Show'}
-                </span>
-              </button>
-              {showCanonicalMinor && (
-                <div className="mt-3 flex flex-wrap gap-3 justify-start">
-                  {getMinor3NPSPositions(ROOT_SEMITONES.C ?? 0).map((notes, idx) => (
-                    <PositionDiagram
-                      key={idx}
-                      notes={notes}
-                      title={`Position ${idx + 1}`}
-                      rootSemitone={ROOT_SEMITONES.C ?? 0}
-                      showFretNumbers={false}
-                      showNoteLabels={false}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
             <section className="mb-10">
-              <h2 className="text-xl font-semibold text-foreground mb-3">
-                {rootId} natural minor 3NPS
-              </h2>
-              <p className="text-xs text-muted-foreground mb-2">
-                Derived from major (b3). Full fretboard, then a continuous run of positions 1–7, then
-                positions in fretboard order. Root highlighted.
-              </p>
+              <h2 className="text-xl font-semibold text-foreground mb-3">{rootId} Natural Minor Scales</h2>
+
               <div className="mb-4">
                 <PositionDiagram
                   notes={minorFullNotes}
-                  title={`${rootId} natural minor 3NPS — full fretboard`}
+                  title={`${rootId} natural minor — full fretboard`}
                   fullScale
                   rootSemitone={rootSemitone}
                 />
               </div>
-              <div className="mb-4">
-                <PositionDiagram
-                  notes={minorFirstSevenNotes}
-                  title={`${rootId} natural minor 3NPS — positions 1–7`}
-                  fullScale
-                  rootSemitone={rootSemitone}
-                />
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">CAGED minor shapes</h3>
+              <div className="flex flex-wrap gap-4 justify-start">
+                {mapperMinorNotesByPos.map((notes, idx) => {
+                  const canonicalPos =
+                    mapperMinorOrder[idx] ?? ((idx + 1) as 1 | 2 | 3 | 4 | 5);
+                  return (
+                    <PositionDiagram
+                      key={`minor-caged-${canonicalPos}-${idx}`}
+                      notes={notes}
+                      title={cagedShapeLabel(canonicalPos)}
+                      rootSemitone={rootSemitone}
+                      tuning={mapperTuning}
+                    />
+                  );
+                })}
               </div>
+            </section>
+
+            <section className="mb-10">
+              <h3 className="text-sm font-semibold text-foreground mb-2">3NPS minor shapes</h3>
               <div className="flex flex-wrap gap-4 justify-start">
                 {minorPositions.map((notes, idx) => {
                   const canonicalIndex = minorOrder[idx] ?? idx;
                   return (
                     <PositionDiagram
-                      key={idx}
+                      key={`minor-3nps-${canonicalIndex + 1}`}
                       notes={asNotePairs(notes)}
-                      title={`Position ${canonicalIndex + 1}`}
+                      title={`3NPS ${canonicalIndex + 1}`}
                       rootSemitone={rootSemitone}
                     />
                   );
