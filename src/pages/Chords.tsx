@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { Footer } from '../components/Footer';
 import { BASIC_CHORDS, BASIC_CHORD_LABELS } from '../data/basicChords';
-import { ChordDiagram } from '../components/ChordDiagram';
+import { ChordBox } from '../components/ChordBox';
 
 const CHORD_TYPES = ['major', 'minor', 'seventh'] as const;
 
@@ -26,10 +26,9 @@ export function Chords() {
               <h2 className="text-xl font-semibold text-foreground mb-4">{label}</h2>
               <div className="flex flex-wrap gap-6">
                 {chords.map((chord) => (
-                  <ChordDiagram
+                  <ChordBox
                     key={`${typeId}-${chord.root}`}
                     chord={chord}
-                    chordType={typeId}
                     title={`${chord.root}${
                       typeId === 'seventh' ? '7' : typeId === 'minor' ? 'm' : ''
                     }`}
