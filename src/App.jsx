@@ -83,8 +83,8 @@ function App() {
   
   // Get visualization data
   const vizData = useMemo(() => {
-    return getVisualizationData(typeId, exerciseId, rootNote);
-  }, [typeId, exerciseId, rootNote]);
+    return getVisualizationData(typeId, exerciseId, rootNote, tuning);
+  }, [typeId, exerciseId, rootNote, tuning]);
 
   const {
     tab,
@@ -95,7 +95,7 @@ function App() {
     getCurrentColumn,
     getActiveNoteIndex,
     loopTicks,
-  } = useExercise(typeId, exerciseId, patternId, rootNote, subdivision, effectiveTicksPerBar);
+  } = useExercise(typeId, exerciseId, patternId, rootNote, subdivision, effectiveTicksPerBar, tuning);
 
   const handleBeat = useCallback((beat) => {
     setCurrentBeat(beat);

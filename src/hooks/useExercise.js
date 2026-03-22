@@ -1,13 +1,14 @@
 import { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { createExerciseEngine } from '../core/exercise';
 import { generateTab } from '../data/exerciseTypes';
+import { STANDARD_TUNING } from '../data/tunings';
 
 /**
  * Hook that owns the exercise engine: generates tab from settings and advances on each metronome tick.
  * When ticksPerBar is provided, loop length is rounded up to a full bar so blank space at end of bar is respected.
  * Returns tab, currentNotes, activeNoteIndex, onTick, reset, getCurrentColumn, getActiveNoteIndex, loopTicks.
  */
-export function useExercise(typeId, exerciseId, patternId, rootNote, subdivision = 2, ticksPerBar = 0) {
+export function useExercise(typeId, exerciseId, patternId, rootNote, subdivision = 2, ticksPerBar = 0, tuning = STANDARD_TUNING) {
   const engineRef = useRef(null);
   if (!engineRef.current) {
     engineRef.current = createExerciseEngine();
@@ -17,15 +18,8 @@ export function useExercise(typeId, exerciseId, patternId, rootNote, subdivision
   const [, setTick] = useState(0);
 
   const tab = useMemo(() => {
-    const result = generateTab(typeId, exerciseId, patternId, rootNote, subdivision);
-    // #region agent log
-    if (result?.length && typeId === 'major-3nps' && typeof fetch !== 'undefined') {
-      const firstThreeLowE = result.slice(0, 3).map((col) => (col && col[5]) ?? null);
-      fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'useExercise.js:tab useMemo',message:'Tab generated (no tuning in deps)',data:{typeId,rootNote,firstThreeLowE},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    }
-    // #endregion
-    return result;
-  }, [typeId, exerciseId, patternId, rootNote, subdivision]);
+    return generateTab(typeId, exerciseId, patternId, rootNote, subdivision, tuning);
+  }, [typeId, exerciseId, patternId, rootNote, subdivision, tuning]);
 
   useEffect(() => {
     engine.setTab(tab, ticksPerBar);

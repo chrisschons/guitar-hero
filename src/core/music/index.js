@@ -28,3 +28,5 @@ export {
 } from './chords.js';
 
 export { getFretboardNotes } from './tuning.js';
+
+export { generateScalePosition } from './scalePosition.js';

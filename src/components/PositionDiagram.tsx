@@ -34,13 +34,21 @@ export function PositionDiagram({
 }: PositionDiagramProps) {
   if (!notes.length) return null;
 
-  const notesSet = new Set(notes.map(([s, f]) => `${s}-${f}`));
   const frets = notes.map(([, f]) => f);
   const minFret = fullScale ? 0 : Math.min(...frets);
-  const maxFret = fullScale ? 23 : Math.max(...frets);
-  const fretRange = maxFret - minFret + 1;
+
+  // Neutral (non-fullScale): always exactly 5 columns, notes normalized to [0–4].
+  // fullScale: derive range from content as before.
+  const NEUTRAL_COLS = 5;
+  const columns = fullScale
+    ? Array.from({ length: 24 - minFret + 1 }, (_, i) => i)   // absolute cols
+    : Array.from({ length: NEUTRAL_COLS }, (_, col) => col);   // normalized cols 0-4
+
+  const notesSet = new Set(
+    notes.map(([s, f]) => `${s}-${fullScale ? f : f - minFret}`)
+  );
   const cellWidth = fullScale ? undefined : 28;
-  const showZeroColumn = minFret === 0;
+  const showZeroColumn = fullScale && minFret === 0;
 
   return (
     <div
@@ -56,17 +64,20 @@ export function PositionDiagram({
           <div className="flex flex-col w-full">
             {showFretNumbers && (
               <div className="flex mb-0.5 w-full">
-                {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => (
-                  <div
-                    key={fret}
-                    className={`text-center text-[10px] text-muted-foreground ${
-                      fullScale ? 'flex-1 min-w-0' : 'shrink-0'
-                    }`}
-                    style={!fullScale ? { width: cellWidth } : undefined}
-                  >
-                    {showZeroColumn && fret === 0 ? '' : fret}
-                  </div>
-                ))}
+                {columns.map((col) => {
+                  const absFret = fullScale ? col : col + minFret;
+                  return (
+                    <div
+                      key={col}
+                      className={`text-center text-[10px] text-muted-foreground ${
+                        fullScale ? 'flex-1 min-w-0' : 'shrink-0'
+                      }`}
+                      style={!fullScale ? { width: cellWidth } : undefined}
+                    >
+                      {showZeroColumn && col === 0 ? '' : absFret}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {[0, 1, 2, 3, 4, 5].map((stringIndex) => (
@@ -74,27 +85,28 @@ export function PositionDiagram({
                 <div
                   className="absolute top-1/2 border-t border-gray-600"
                   style={{
-                    left: showZeroColumn ? (fullScale ? `${100 / fretRange}%` : cellWidth) : 0,
+                    left: showZeroColumn ? `${100 / columns.length}%` : 0,
                     right: 0,
                     borderWidth: stringIndex > 2 ? '2px' : '1px',
                     opacity: 0.5,
                   }}
                 />
-                {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => {
-                  const hasNote = notesSet.has(`${stringIndex}-${fret}`);
-                  const isRoot = hasNote && isRootNoteInScale(stringIndex, fret, rootSemitone, tuning);
-                  const isFirstCol = fret === minFret;
-                  const isNut = minFret === 0 && isFirstCol;
-                  const isFirstLineBold = minFret === 1 && isFirstCol;
+                {columns.map((col) => {
+                  const absFret = fullScale ? col : col + minFret;
+                  const hasNote = notesSet.has(`${stringIndex}-${col}`);
+                  const isRoot = hasNote && isRootNoteInScale(stringIndex, absFret, rootSemitone, tuning);
+                  const isFirstCol = col === columns[0];
+                  const isNut = showZeroColumn && isFirstCol;
+                  const isFirstLineBold = fullScale && minFret === 1 && isFirstCol;
                   return (
                     <div
-                      key={fret}
+                      key={col}
                       className={`flex items-center justify-center relative ${
                         isNut ? 'border-r-4 border-gray-500' : 'border-r border-gray-700'
                       } ${
                         isFirstLineBold
                           ? 'border-l-4 border-gray-500'
-                          : isFirstCol && minFret > 1
+                          : isFirstCol && fullScale && minFret > 1
                           ? 'border-l border-gray-700'
                           : ''
                       } ${fullScale ? 'flex-1 min-w-0' : 'shrink-0'}`}
@@ -115,13 +127,14 @@ export function PositionDiagram({
             ))}
             {showNoteLabels && (
               <div className="flex w-full mt-0.5">
-                {Array.from({ length: fretRange }, (_, i) => minFret + i).map((fret) => {
-                  const noteSemitone = getNoteAt(5, fret, tuning);
+                {columns.map((col) => {
+                  const absFret = fullScale ? col : col + minFret;
+                  const noteSemitone = getNoteAt(5, absFret, tuning);
                   const noteName = getNoteName(noteSemitone);
-                  const isDotFret = FRET_DOTS.includes(fret);
+                  const isDotFret = FRET_DOTS.includes(absFret);
                   return (
                     <div
-                      key={fret}
+                      key={col}
                       className={`text-center text-[10px] text-muted-foreground ${
                         fullScale ? 'flex-1 min-w-0' : 'shrink-0'
                       } ${isDotFret ? 'font-bold text-foreground' : ''}`}

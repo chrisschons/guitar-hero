@@ -212,7 +212,7 @@ export const SCALE_INTERVALS = {
 // String open note semitones from C (e=4, B=11, G=7, D=2, A=9, E=4) - string index 0 high e to 5 low E
 // Sourced from music engine / standard tuning for single source of truth
 import { STANDARD_TUNING } from '../data/tunings.js';
-import { getScale as getScaleFromEngine, getNoteAt, ROOT_SEMITONES } from '../core/music/index.js';
+import { getScale as getScaleFromEngine, getNoteAt, ROOT_SEMITONES, generateScalePosition } from '../core/music/index.js';
 import { RIFFS, getRiff } from './riffs/index.js';
 import { CHORD_PROGRESSIONS, generateChordProgressionTab } from './chordProgressions.js';
 import { riffToTab } from '../core/exercise/riffToTab.js';
@@ -221,26 +221,18 @@ export const STRING_SEMITONES = STANDARD_TUNING;
 import { getMajor3NPSPositions, getMinor3NPSPositions, get3NPSStartingOrder } from './scalePositions.js';
 
 // Get position notes for reference page. 3NPS uses canonical C-based positions transposed by rootId.
-export function getReferencePosition(scaleTypeId, positionIndex, rootId = 'A') {
+export function getReferencePosition(scaleTypeId, positionIndex, rootId = 'A', tuning = STANDARD_TUNING) {
   const targetSemitone = ROOT_SEMITONES[rootId] ?? 9;
+  if (scaleTypeId === 'pentatonic' || scaleTypeId === 'blues') {
+    return { notes: generateScalePosition(targetSemitone, scaleTypeId, positionIndex, tuning) };
+  }
   let positions;
   switch (scaleTypeId) {
-    case 'pentatonic': positions = PENTATONIC_POSITIONS; break;
-    case 'blues': positions = BLUES_POSITIONS; break;
     case 'major-3nps': positions = getMajor3NPSPositions(targetSemitone); break;
     case 'minor-3nps': positions = getMinor3NPSPositions(targetSemitone); break;
     default: return { notes: [] };
   }
-  const baseNotes = positions[positionIndex] ? positions[positionIndex] : [];
-  if (scaleTypeId === 'pentatonic' || scaleTypeId === 'blues') {
-    const baseRootSemitone = ROOT_SEMITONES.A ?? 9;
-    const semitoneDiff = ((targetSemitone - baseRootSemitone) % 12 + 12) % 12;
-    const notes = baseNotes
-      .map(([stringIndex, fret]) => [stringIndex, fret + semitoneDiff])
-      .filter(([, fret]) => fret >= 0 && fret <= 23);
-    return { notes };
-  }
-  return { notes: baseNotes };
+  return { notes: positions[positionIndex] ?? [] };
 }
 
 // Get all scale notes across the fretboard for reference, for a given rootId (default A). Returns { notes }.
@@ -536,7 +528,7 @@ function getPositionsForScale(scaleType, rootSemitone = 0) {
 }
 
 // Main tab generation function
-export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision = 2) {
+export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision = 2, tuning = STANDARD_TUNING) {
   const type = EXERCISE_TYPES.find(t => t.id === typeId);
   if (!type) return [];
 
@@ -555,25 +547,19 @@ export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision
   if (typeId === 'pentatonic') {
     const exercise = type.exercises.find(e => e.id === exerciseId);
     if (!exercise) return [];
-    
-    const offset = getRootOffset(rootNote);
-    const baseNotes = PENTATONIC_POSITIONS[exercise.positionIndex];
-    const transposedNotes = baseNotes.map(([string, fret]) => [string, fret + offset]);
-    
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const notes = generateScalePosition(rootSemitone, 'pentatonic', exercise.positionIndex, tuning);
     const patternFn = PENTATONIC_PATTERNS[patternId] || PENTATONIC_PATTERNS['up-down'];
-    return patternFn(transposedNotes);
+    return patternFn(notes);
   }
 
   if (typeId === 'blues') {
     const exercise = type.exercises.find(e => e.id === exerciseId);
     if (!exercise) return [];
-    
-    const offset = getRootOffset(rootNote);
-    const baseNotes = BLUES_POSITIONS[exercise.positionIndex];
-    const transposedNotes = baseNotes.map(([string, fret]) => [string, fret + offset]);
-    
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const notes = generateScalePosition(rootSemitone, 'blues', exercise.positionIndex, tuning);
     const patternFn = GENERIC_PATTERNS[patternId] || GENERIC_PATTERNS['up-down'];
-    return patternFn(transposedNotes);
+    return patternFn(notes);
   }
 
   if (typeId === 'major-3nps') {
@@ -597,10 +583,11 @@ export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision
   }
 
   if (typeId === 'scale-runs') {
-    const offset = getRootOffset(rootNote);
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const anchorFret = ((rootSemitone - tuning[5]) % 12 + 12) % 12;
+    const offset = anchorFret - 5;
     const exerciseFn = SCALE_RUN_EXERCISES[exerciseId];
     if (!exerciseFn) return [];
-    
     const notes = exerciseFn(offset);
     const patternFn = SCALE_RUN_PATTERNS[patternId] || SCALE_RUN_PATTERNS['up-down'];
     return patternFn(notes);
@@ -620,34 +607,32 @@ export function generateTab(typeId, exerciseId, patternId, rootNote, subdivision
 }
 
 // Get visualization data for fretboard
-export function getVisualizationData(typeId, exerciseId, rootNote) {
+export function getVisualizationData(typeId, exerciseId, rootNote, tuning = STANDARD_TUNING) {
   const type = EXERCISE_TYPES.find(t => t.id === typeId);
   const offset = getRootOffset(rootNote);
-  
+
   if (typeId === 'pentatonic') {
     const exercise = type?.exercises.find(e => e.id === exerciseId);
-    if (!exercise) return { type: 'pentatonic', positionIndex: 0, offset };
-    
+    if (!exercise) return { type: 'pentatonic', positionIndex: 0, positionNotes: [] };
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const positionNotes = generateScalePosition(rootSemitone, 'pentatonic', exercise.positionIndex, tuning);
     return {
       type: 'pentatonic',
       scaleType: 'pentatonic',
       positionIndex: exercise.positionIndex,
-      offset,
+      positionNotes,
     };
   }
 
   if (typeId === 'blues') {
     const exercise = type?.exercises.find(e => e.id === exerciseId);
-    if (!exercise) return { type: 'blues', positionIndex: 0, offset, positionNotes: [] };
-    
-    const baseNotes = BLUES_POSITIONS[exercise.positionIndex] || [];
-    const positionNotes = baseNotes.map(([string, fret]) => [string, fret + offset]);
-    
+    if (!exercise) return { type: 'blues', positionIndex: 0, positionNotes: [] };
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const positionNotes = generateScalePosition(rootSemitone, 'blues', exercise.positionIndex, tuning);
     return {
       type: 'blues',
       scaleType: 'blues',
       positionIndex: exercise.positionIndex,
-      offset,
       positionNotes,
     };
   }
@@ -685,12 +670,14 @@ export function getVisualizationData(typeId, exerciseId, rootNote) {
   if (typeId === 'scale-runs') {
     const exercise = type?.exercises.find(e => e.id === exerciseId);
     const scaleType = exercise?.scaleType || 'pentatonic';
+    const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+    const anchorFret = ((rootSemitone - tuning[5]) % 12 + 12) % 12;
+    const runOffset = anchorFret - 5;
     const exerciseFn = SCALE_RUN_EXERCISES[exerciseId];
-    const notes = exerciseFn ? exerciseFn(offset) : [];
+    const notes = exerciseFn ? exerciseFn(runOffset) : [];
     return {
       type: 'scale-runs',
       scaleType,
-      offset,
       exerciseNotes: notes,
     };
   }

@@ -28,33 +28,6 @@ function getRootFrets(stringIndex, rootSemitone, tuning) {
   return frets;
 }
 
-// Pentatonic position frets in A (base) - which frets belong to each position per string
-// String indices: 0=e, 1=B, 2=G, 3=D, 4=A, 5=E
-// Verified against actual A minor pentatonic notes: A, C, D, E, G
-const BASE_POSITION_FRETS = [
-  // Position 1 (frets 5-8 in A)
-  { 0: [5, 8], 1: [5, 8], 2: [5, 7], 3: [5, 7], 4: [5, 7], 5: [5, 8] },
-  // Position 2 (frets 7-10 in A)
-  { 0: [8, 10], 1: [8, 10], 2: [7, 9], 3: [7, 10], 4: [7, 10], 5: [8, 10] },
-  // Position 3 (frets 10-13 in A)
-  { 0: [10, 12], 1: [10, 13], 2: [9, 12], 3: [10, 12], 4: [10, 12], 5: [10, 12] },
-  // Position 4 (frets 12-15 in A)
-  { 0: [12, 15], 1: [13, 15], 2: [12, 14], 3: [12, 14], 4: [12, 15], 5: [12, 15] },
-  // Position 5 (frets 15-17 in A)
-  { 0: [15, 17], 1: [15, 17], 2: [14, 17], 3: [14, 17], 4: [15, 17], 5: [15, 17] },
-];
-
-// Check if a fret is in the current position (with offset for different keys)
-function isInPosition(stringIndex, fret, positionIndex, offset) {
-  const position = BASE_POSITION_FRETS[positionIndex];
-  if (!position || !position[stringIndex]) return false;
-  
-  const [fret1, fret2] = position[stringIndex];
-  const offsetFret1 = fret1 + offset;
-  const offsetFret2 = fret2 + offset;
-  
-  return fret === offsetFret1 || fret === offsetFret2;
-}
 
 // Get power chord frets to display based on exercise
 function getPowerChordFrets(rootFret, exerciseId) {
@@ -99,11 +72,7 @@ function getPowerChordFrets(rootFret, exerciseId) {
 }
 
 export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', tuning = STANDARD_TUNING, showFretNotes = false }) {
-  // #region agent log
-  const tuningSnap = tuning?.join?.('-') ?? 'no-tuning';
-  fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'FretboardDiagram.jsx:render',message:'Fretboard render',data:{vizType:vizData?.type,tuningSnapshot:tuningSnap,offset:vizData?.offset,positionNotesLen:vizData?.positionNotes?.length},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-  // #endregion
-  const { type, rootFret = 0, exerciseId = '', positionIndex = 0, offset = 0, exerciseNotes = [], positionNotes = [], scaleType = 'pentatonic' } = vizData || {};
+  const { type, rootFret = 0, exerciseId = '', positionIndex = 0, exerciseNotes = [], positionNotes = [], scaleType = 'pentatonic' } = vizData || {};
 
   const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9; // Default to A
 
@@ -117,8 +86,8 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
     ? new Set(exerciseNotes.map(([string, fret]) => `${string}-${fret}`))
     : null;
   
-  // For position-based exercises (blues, major, minor), create lookup of position notes
-  const positionNotesSet = (type === 'blues' || type === 'major-3nps' || type === 'minor-3nps')
+  // For position-based exercises (pentatonic, blues, major, minor), create lookup of position notes
+  const positionNotesSet = (type === 'pentatonic' || type === 'blues' || type === 'major-3nps' || type === 'minor-3nps')
     ? new Set(positionNotes.map(([string, fret]) => `${string}-${fret}`))
     : null;
   
@@ -193,12 +162,12 @@ export function FretboardDiagram({ vizData, currentNotes = [], rootNote = 'A', t
                     isRoot = rootFretsForString.includes(fret);
                     inCurrentPosition = positionNotesSet?.has(`${stringIndex}-${fret}`) || false;
                   } else {
-                    // Pentatonic - check if this fret is in the scale
+                    // Pentatonic - show full scale, position notes highlighted via positionNotesSet
                     const scaleFrets = getScaleFrets(stringIndex, rootSemitone, 'pentatonic', tuning);
                     hasNote = scaleFrets.includes(fret);
                     const rootFretsForString = getRootFrets(stringIndex, rootSemitone, tuning);
                     isRoot = rootFretsForString.includes(fret);
-                    inCurrentPosition = isInPosition(stringIndex, fret, positionIndex, offset);
+                    inCurrentPosition = positionNotesSet?.has(`${stringIndex}-${fret}`) || false;
                   }
                   
                   return (

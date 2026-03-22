@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Footer } from '../components/Footer';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
-import { PENTATONIC_POSITIONS, BLUES_POSITIONS } from '../data/exerciseTypes';
 import {
   C_MAJOR_3NPS_POSITIONS,
   getMajor3NPSPositions,
@@ -14,7 +13,7 @@ import {
 } from '../data/neutral3NPS';
 import { MAJOR_CAGED_POSITIONS, MINOR_CAGED_POSITIONS } from '../data/scaleCagedPositions';
 import { PositionDiagram } from '../components/PositionDiagram';
-import { getNoteAt, ROOT_SEMITONES, NOTE_NAMES } from '../core/music';
+import { getNoteAt, ROOT_SEMITONES, NOTE_NAMES, generateScalePosition } from '../core/music';
 import { STANDARD_TUNING } from '../data/tunings';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
@@ -129,33 +128,6 @@ function bluesPitchSet(rootSemitone: number): PitchSet {
   return new Set([0, 3, 5, 6, 7, 10].map((i) => (i + rootSemitone) % 12));
 }
 
-function transposeFrets(
-  positions: any[],
-  deltaSemitones: number
-): [number, number][][] {
-  // Base positions are hardcoded in C standard tuning for root A (fret coords),
-  // so transposition is a simple fret shift.
-  return positions.map((pos: any) =>
-    (pos as any[])
-      .map((note: any) => [note[0], note[1] + deltaSemitones] as [number, number])
-      .filter(([, fret]) => Number.isFinite(fret) && fret >= 0 && fret <= 23)
-  );
-}
-
-function chooseBestDeltaForPositions(basePositions: any[], deltaSemitones: number): number {
-  const candidates = [deltaSemitones, deltaSemitones - 12];
-  let bestDelta = candidates[0];
-  let bestScore = -1;
-  for (const d of candidates) {
-    const transposed = transposeFrets(basePositions, d);
-    const score = transposed.reduce((sum, pos) => sum + pos.length, 0);
-    if (score > bestScore) {
-      bestScore = score;
-      bestDelta = d;
-    }
-  }
-  return bestDelta;
-}
 
 function getLowEAnchor(notes: [number, number][]): number | null {
   let anchor: number | null = null;
@@ -185,7 +157,7 @@ const A_MINOR_FULL_NOTES: [number, number][] = fullFretboardScaleNotes(
 );
 
 export function Scales() {
-  const [rootId, setRootId] = useLocalStorage('guitar-hero-debug-root', 'C');
+  const [rootId, setRootId] = useLocalStorage('guitar-hero-root-note', 'A');
   const [scaleTab, setScaleTab] = useState<'shapes' | 'major' | 'minor'>('shapes');
   const [showCanonicalMajor, setShowCanonicalMajor] = useState(false);
   const [showCanonicalMinor, setShowCanonicalMinor] = useState(false);
@@ -207,20 +179,11 @@ export function Scales() {
   const neutralMajorPitchSet = majorPitchSet(neutralRootSemitone);
   const neutralMinorPitchSet = minorPitchSet(neutralRootSemitone);
 
-  // Pentatonic + blues are stored as A-based neutral shapes in fret coordinates.
-  // To make them key-aware, transpose by the semitone delta from A to the selected root.
-  const semitoneDeltaFromA = ((rootSemitone - ROOT_SEMITONE_A) % 12 + 12) % 12;
-  const semitoneDeltaNeutral = ((neutralRootSemitone - ROOT_SEMITONE_A) % 12 + 12) % 12;
-
-  const pentatonicDeltaFromA = chooseBestDeltaForPositions(PENTATONIC_POSITIONS as any, semitoneDeltaFromA);
-  const bluesDeltaFromA = chooseBestDeltaForPositions(BLUES_POSITIONS as any, semitoneDeltaFromA);
-  const pentatonicDeltaNeutral = chooseBestDeltaForPositions(PENTATONIC_POSITIONS as any, semitoneDeltaNeutral);
-  const bluesDeltaNeutral = chooseBestDeltaForPositions(BLUES_POSITIONS as any, semitoneDeltaNeutral);
-
-  const pentatonicPositionsByKey = transposeFrets(PENTATONIC_POSITIONS as any, pentatonicDeltaFromA);
-  const bluesPositionsByKey = transposeFrets(BLUES_POSITIONS as any, bluesDeltaFromA);
-  const pentatonicNeutralPositions = transposeFrets(PENTATONIC_POSITIONS as any, pentatonicDeltaNeutral);
-  const bluesNeutralPositions = transposeFrets(BLUES_POSITIONS as any, bluesDeltaNeutral);
+  // Pitch-based pentatonic and blues positions for any root in standard tuning.
+  const pentatonicPositionsByKey = [0,1,2,3,4].map(i => generateScalePosition(rootSemitone, 'pentatonic', i, STANDARD_TUNING));
+  const bluesPositionsByKey = [0,1,2,3,4].map(i => generateScalePosition(rootSemitone, 'blues', i, STANDARD_TUNING));
+  const pentatonicNeutralPositions = [0,1,2,3,4].map(i => generateScalePosition(neutralRootSemitone, 'pentatonic', i, STANDARD_TUNING));
+  const bluesNeutralPositions = [0,1,2,3,4].map(i => generateScalePosition(neutralRootSemitone, 'blues', i, STANDARD_TUNING));
 
   const pentatonicFullNotesByKey = fullFretboardScaleNotes(pentatonicPitchSet(rootSemitone));
   const bluesFullNotesByKey = fullFretboardScaleNotes(bluesPitchSet(rootSemitone));
