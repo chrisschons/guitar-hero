@@ -31,9 +31,9 @@ const DIAGRAM_INNER_W = 128;
 /** Matches underlay `border-2` — string centers run inside this inset */
 const DIAGRAM_BORDER_PX = 2;
 /** Horizontal inset so edge string dots (× ○ •) are not clipped by the frame */
-const FRAME_PAD_X = 8;
+const FRAME_PAD_X = 18;
 /** Space between ×/○ row and top of chord frame */
-const ABOVE_NUT_MARGIN = 12;
+const ABOVE_NUT_MARGIN = 6;
 const DIAGRAM_OUTER_W = DIAGRAM_INNER_W + FRAME_PAD_X * 2;
 const VIS_STRING_HIGH_E = 5;
 
@@ -102,7 +102,7 @@ function barrePositionStyle(topData: number, bottomData: number): CSSProperties 
   };
 }
 
-const FRET_BANDS = [1, 2, 3, 4] as const;
+const FRET_BANDS_RELATIVE = [0, 1, 2, 3] as const;
 
 /**
  * Frame + vertical strings + three interior horizontal fret lines under the dots; four fret bands.
@@ -115,15 +115,31 @@ export function ChordBox({ chord, title = '', className = '', tuning = STANDARD_
   const firstColumnFret = startFret || 1;
   const barreLayout = resolveBarre(barre, firstColumnFret);
 
-  const includeNut = true;
+  // Chord chart behavior:
+  // - startFret <= 2: include the nut and hide left labels
+  // - startFret >= 3: hide the nut, use a solid top line, show left labels (startFret..startFret+3),
+  //   and start the diagram at the first fret row.
+  const includeNut = startFret <= 2;
   const showFretLabels = !includeNut;
+  const TOP_LINE_THIN_PX = 2;
+  // When we omit the nut, we still draw a thin top line and reserve its height
+  // so dots don't overlap the line.
+  const topLineSpacePx = includeNut ? NUT_THICK_PX : TOP_LINE_THIN_PX;
+  const topLineBorderWidthPx = includeNut ? NUT_THICK_PX : TOP_LINE_THIN_PX;
+  const displayStartFret = includeNut ? 1 : startFret;
+  const displayFrets = FRET_BANDS_RELATIVE.map((i) => displayStartFret + i);
+  const aboveNutMinHeight = includeNut ? 24 : 16;
+  const aboveNutMarginBottom = includeNut ? ABOVE_NUT_MARGIN : 8;
+  // With no nut, most of the nut band is removed. Add a small top margin so the
+  // fret frame remains visually balanced.
+  const frameTopMarginPx = includeNut ? 0 : Math.max(0, NUT_THICK_PX - TOP_LINE_THIN_PX);
 
   return (
     <div
-      className={`bg-secondary rounded-lg p-3 border border-border inline-block ${className}`.trim()}
+      className={`bg-secondary rounded-lg p-3 pb-6 border border-border inline-block ${className}`.trim()}
     >
       {title ? (
-        <div className="text-xs font-medium text-muted-foreground mb-2 text-center">{title}</div>
+        <div className="text-xl font-black text-muted-foreground mb-2 text-center">{title}</div>
       ) : null}
 
       <div
@@ -132,7 +148,7 @@ export function ChordBox({ chord, title = '', className = '', tuning = STANDARD_
       >
         {showFretLabels ? (
           <div className="flex w-6 shrink-0 flex-col pt-6">
-            {FRET_BANDS.map((fretNum) => (
+            {displayFrets.map((fretNum) => (
               <div
                 key={`lbl-${fretNum}`}
                 className="flex items-center justify-end pr-1 font-mono text-[10px] text-muted-foreground tabular-nums"
@@ -144,145 +160,141 @@ export function ChordBox({ chord, title = '', className = '', tuning = STANDARD_
           </div>
         ) : null}
 
-        <div className="mx-auto flex w-full max-w-full flex-1 flex-col" style={{ width: DIAGRAM_OUTER_W }}>
-          {/* Above nut — × / ○; margin below adds air before the frame / nut */}
+        {/* Outer width includes side padding; inner content = DIAGRAM_INNER_W so ×/○ and grid share the same % base */}
+        <div className="mx-auto flex shrink-0 flex-col" style={{ width: DIAGRAM_OUTER_W }}>
           <div
-            className="relative shrink-0"
-            style={{
-              width: DIAGRAM_OUTER_W,
-              paddingLeft: FRAME_PAD_X,
-              paddingRight: FRAME_PAD_X,
-              minHeight: 44,
-              marginBottom: ABOVE_NUT_MARGIN,
-            }}
+            className="flex flex-col"
+            style={{ paddingLeft: FRAME_PAD_X, paddingRight: FRAME_PAD_X }}
           >
-            {[0, 1, 2, 3, 4, 5].map((vis) => {
-              const s = VIS_STRING_HIGH_E - vis;
-              const col = frets[s];
-              const isMute = col === -1;
-              const isOpen = col === 0 && startFret === 0;
-              const openIsRoot =
-                root && isOpen && isRootAt(s, col, startFret, root, tuning);
-
-              return (
-                <div
-                  key={`xo-${vis}`}
-                  className="absolute bottom-0 flex justify-center"
-                  style={stringPositionStyle(vis)}
-                >
-                  {isMute ? (
-                    <span className="font-mono text-sm font-semibold leading-none text-muted-foreground">
-                      ×
-                    </span>
-                  ) : isOpen ? (
-                    openIsRoot ? (
-                      <span
-                        className="h-[11px] w-[11px] shrink-0 box-border rounded-full border-2 border-accent bg-transparent"
-                        aria-hidden
-                      />
-                    ) : (
-                      <span
-                        className="h-[11px] w-[11px] shrink-0 rounded-full bg-accent"
-                        aria-hidden
-                      />
-                    )
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-
-          <div
-            className="relative shrink-0 overflow-visible"
-            style={{
-              width: DIAGRAM_OUTER_W,
-              paddingLeft: FRAME_PAD_X,
-              paddingRight: FRAME_PAD_X,
-            }}
-          >
+            {/* Above nut — × / ○; same width as framed grid (no double-counting padding) */}
             <div
-              className="relative w-full"
-              style={{ height: FRET_ROW_H * NUM_FRETS + NUT_THICK_PX }}
+              className="relative w-full shrink-0"
+              style={{ minHeight: aboveNutMinHeight, marginBottom: aboveNutMarginBottom }}
             >
-              {/* Underlay: nut, box, vertical strings, three interior fret lines (z-0) */}
+              {[0, 1, 2, 3, 4, 5].map((vis) => {
+                const s = VIS_STRING_HIGH_E - vis;
+                const col = frets[s];
+                const isMute = col === -1;
+                const isOpen = col === 0 && startFret === 0;
+                const openIsRoot =
+                  root && isOpen && isRootAt(s, col, startFret, root, tuning);
+
+                return (
+                  <div
+                    key={`xo-${vis}`}
+                    className="absolute bottom-0 flex justify-center"
+                    style={stringPositionStyle(vis)}
+                  >
+                    {isMute ? (
+                      <span className="font-mono text-sm font-semibold leading-none text-muted-foreground">
+                        ×
+                      </span>
+                    ) : isOpen ? (
+                      openIsRoot ? (
+                        <span
+                          className="h-[11px] w-[11px] shrink-0 box-border rounded-full border-2 border-accent bg-transparent"
+                          aria-hidden
+                        />
+                      ) : (
+                        <span
+                          className="h-[11px] w-[11px] shrink-0 rounded-full bg-accent"
+                          aria-hidden
+                        />
+                      )
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="relative w-full shrink-0 overflow-visible">
               <div
-                className="pointer-events-none absolute inset-0 z-0 flex flex-col rounded-none border-2 border-gray-600 bg-secondary"
+                className="relative w-full"
+                style={{
+                  height: FRET_ROW_H * NUM_FRETS + topLineSpacePx,
+                  marginTop: frameTopMarginPx,
+                }}
               >
+                {/* Underlay: nut, box, vertical strings, three interior fret lines (z-0) */}
                 <div
-                  className="box-border h-0 w-full shrink-0 border-0 border-b border-solid border-gray-500"
-                  style={{ borderBottomWidth: NUT_THICK_PX }}
-                />
-                <div className="relative min-h-0 flex-1">
-                  {[1, 2, 3, 4].map((k) => (
-                    <div
-                      key={`v-${k}`}
-                      className="absolute top-0 bottom-0 w-px bg-gray-600/85"
-                      style={{
-                        left: `calc(${DIAGRAM_BORDER_PX}px + (100% - ${2 * DIAGRAM_BORDER_PX}px) * ${k / 5})`,
-                        transform: 'translateX(-50%)',
-                      }}
-                    />
-                  ))}
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={`h-fret-${i}`}
-                      className="absolute right-0 left-0 bg-gray-700"
-                      style={{ top: i * FRET_ROW_H, height: 1 }}
-                    />
+                  className={`pointer-events-none absolute inset-0 z-0 flex flex-col rounded-none bg-secondary border-l-2 border-r-2 border-b-2 border-slate-700`}
+                >
+                  <div
+                    className="box-border h-0 w-full shrink-0 border-0 border-b border-solid border-slate-700"
+                    style={{ borderBottomWidth: topLineBorderWidthPx }}
+                  />
+                  <div className="relative min-h-0 flex-1">
+                    {[1, 2, 3, 4].map((k) => (
+                      <div
+                        key={`v-${k}`}
+                        className="absolute top-0 bottom-0 w-px bg-slate-700/85"
+                        style={{
+                          left: `calc(${DIAGRAM_BORDER_PX}px + (100% - ${2 * DIAGRAM_BORDER_PX}px) * ${k / 5})`,
+                          transform: 'translateX(-50%)',
+                        }}
+                      />
+                    ))}
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={`h-fret-${i}`}
+                        className="absolute right-0 left-0 bg-slate-700"
+                        style={{ top: i * FRET_ROW_H, height: 1 }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dots & barre */}
+                <div className="relative z-10 flex h-full w-full flex-col rounded-none">
+                  <div className="shrink-0" style={{ height: topLineSpacePx }} aria-hidden />
+                  {displayFrets.map((displayFret) => (
+                    <div key={displayFret} className="relative" style={{ height: FRET_ROW_H }}>
+                      {barreLayout?.atFret === displayFret ? (
+                        <div
+                          className="pointer-events-none absolute top-1/2 z-5 h-1.5 -translate-y-1/2 rounded-sm bg-accent"
+                          style={barrePositionStyle(
+                            barreLayout.topDataString,
+                            barreLayout.bottomDataString
+                          )}
+                        />
+                      ) : null}
+                      {[0, 1, 2, 3, 4, 5].map((vis) => {
+                        const s = VIS_STRING_HIGH_E - vis;
+                        const col = frets[s];
+                        const isOpen = col === 0 && startFret === 0;
+                        const actual = getActualFret(col, startFret);
+                        const showDot = actual === displayFret && !isOpen && col >= 0;
+                        const showRoot =
+                          root && showDot && isRootAt(s, col, startFret, root, tuning);
+                        const finger = fingers?.[s];
+
+                        return (
+                          <div
+                            key={`${vis}-${displayFret}`}
+                            className="absolute top-1/2 z-20 -translate-y-1/2"
+                            style={stringPositionStyle(vis)}
+                          >
+                            {showDot ? (
+                              <div
+                                className={`flex h-3.5 w-3.5 items-center justify-center rounded-full box-border ${
+                                  showRoot
+                                    ? 'border-2 border-accent bg-secondary'
+                                    : 'bg-accent'
+                                }`}
+                              >
+                                {finger != null && finger !== '' ? (
+                                  <span className="text-[9px] font-semibold leading-none text-accent-foreground">
+                                    {finger}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
                   ))}
                 </div>
-              </div>
-
-              {/* Dots & barre */}
-              <div className="relative z-10 flex h-full w-full flex-col rounded-none">
-                <div className="shrink-0" style={{ height: NUT_THICK_PX }} aria-hidden />
-                {FRET_BANDS.map((fretNum) => (
-                  <div key={fretNum} className="relative" style={{ height: FRET_ROW_H }}>
-                    {barreLayout?.atFret === fretNum ? (
-                      <div
-                        className="pointer-events-none absolute top-1/2 z-5 h-1.5 -translate-y-1/2 rounded-sm bg-accent"
-                        style={barrePositionStyle(
-                          barreLayout.topDataString,
-                          barreLayout.bottomDataString
-                        )}
-                      />
-                    ) : null}
-                    {[0, 1, 2, 3, 4, 5].map((vis) => {
-                      const s = VIS_STRING_HIGH_E - vis;
-                      const col = frets[s];
-                      const isOpen = col === 0 && startFret === 0;
-                      const actual = getActualFret(col, startFret);
-                      const showDot = actual === fretNum && !isOpen && col >= 0;
-                      const showRoot =
-                        root && showDot && isRootAt(s, col, startFret, root, tuning);
-                      const finger = fingers?.[s];
-
-                      return (
-                        <div
-                          key={`${vis}-${fretNum}`}
-                          className="absolute top-1/2 z-20 -translate-y-1/2"
-                          style={stringPositionStyle(vis)}
-                        >
-                          {showDot ? (
-                            <div
-                              className={`flex h-3.5 w-3.5 items-center justify-center rounded-full box-border ${
-                                showRoot
-                                  ? 'border-2 border-accent bg-secondary'
-                                  : 'bg-accent'
-                              }`}
-                            >
-                              {finger != null && finger !== '' ? (
-                                <span className="text-[9px] font-semibold leading-none text-accent-foreground">
-                                  {finger}
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
               </div>
             </div>
           </div>

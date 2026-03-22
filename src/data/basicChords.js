@@ -38,7 +38,7 @@ export const BASIC_CHORDS = {
     { root: 'A', frets: [0, 1, 2, 2, 0, -1] },
     { root: 'B', frets: [0,2,2,2,0,-1], startFret: 2, barre: [2, 1, 5] },
     { root: 'C', frets: [-1, 1, 0, 1, 3, -1]},
-    { root: 'D', frets: [2, 3, 1, 0, -1, -1] },
+    { root: 'D', frets: [1, 3, 2, 0, -1, -1] },
     { root: 'E', frets: [0, 0, 0, 2, 2, 0] },
     { root: 'F', frets: [0,0,0,2,2,0], startFret: 1, barre: [1, 1, 6] },
     { root: 'G', frets: [0,0,0,2,2,0], startFret: 3, barre: [3,1,6] },

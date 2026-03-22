@@ -1,10 +1,22 @@
 import { Tally3, Guitar, RotateCcw } from 'lucide-react';
+import { Triplet } from './icons/CustomIcons';
 import { EXERCISE_TYPES, SUBDIVISIONS, TIME_SIGNATURES } from '../data/exerciseTypes';
 import { TUNINGS_LIST } from '../data/tunings';
 import { getStringLabels, NOTE_NAMES } from '../core/music';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import { Button } from './ui/button';
+import { Settings } from 'lucide-react';
 
 export function Controls({
   rootNote,
@@ -132,12 +144,12 @@ export function Controls({
       {typeId !== 'riffs' && (
         <Select value={String(subdivision)} onValueChange={(val) => onSubdivisionChange(Number(val))}>
           <SelectTrigger size="sm">
-            {subdivision === 3 ? <Tally3 size={14} /> : <SelectValue />}
+            {subdivision === 3 ? <Triplet size={14} /> : <SelectValue />}
           </SelectTrigger>
           <SelectContent>
             {SUBDIVISIONS.map((sub) => (
               <SelectItem key={sub.id} value={String(sub.id)}>
-                {sub.id === 3 ? <Tally3 size={16} /> : sub.name}
+                {sub.id === 3 ? <Triplet size={16} /> : sub.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -145,7 +157,45 @@ export function Controls({
       )}
 
 
-      <div className="hidden md:flex items-center gap-2">
+    
+      </div>
+
+      {/* Right: Reset all, Scroll, Fretboard, Count-in, Theme */}
+      <div className="flex flex-wrap gap-3 items-center">
+      <div className="flex items-center gap-2">
+       
+      {/*}
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+          <Switch checked={tabScrollMode} onCheckedChange={onTabScrollModeChange} />
+          <span>Scroll</span>
+        </label>
+        */}
+        
+       
+       
+        <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline">  <Settings size={12} /> </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuGroup>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer px-1 py-2">
+          <Switch checked={showFretboard} onCheckedChange={onShowFretboardChange} />
+          <span>Fretboard</span>
+        </label>
+      
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer px-1 py-2">
+          <Switch checked={countInEnabled} onCheckedChange={onCountInEnabledChange} />
+          <span>Count-in</span>
+        </label>
+       
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer px-1 py-2">
+          <Switch checked={showFretNotes} onCheckedChange={onShowFretNotesChange} />
+          <span>Notes</span>
+        </label>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <div className="hidden md:flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Click</span>
         <Slider
           defaultValue={[metronomeVolume]}
@@ -159,39 +209,17 @@ export function Controls({
           className="w-[60px]"
         />
       </div>
-      </div>
-
-      {/* Right: Reset all, Scroll, Fretboard, Count-in, Theme */}
-      <div className="flex flex-wrap gap-3 items-center">
-      <div className="flex items-center gap-2">
+        <DropdownMenuItem 
+         type="button"
+         onClick={onResetAllToDefaults}>
        
-      {/*}
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-          <Switch checked={tabScrollMode} onCheckedChange={onTabScrollModeChange} />
-          <span>Scroll</span>
-        </label>
-        */}
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-          <Switch checked={showFretboard} onCheckedChange={onShowFretboardChange} />
-          <span>Fretboard</span>
-        </label>
-      
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-          <Switch checked={countInEnabled} onCheckedChange={onCountInEnabledChange} />
-          <span>Count-in</span>
-        </label>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-          <Switch checked={showFretNotes} onCheckedChange={onShowFretNotesChange} />
-          <span>Notes</span>
-        </label>
-        <button
-          type="button"
-          onClick={onResetAllToDefaults}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted transition-colors"
-        >
-          <RotateCcw size={12} />
+          <RotateCcw size={12} />  Reset to Defaults
          
-        </button>
+   
+        </DropdownMenuItem>
+      
+      </DropdownMenuContent>
+    </DropdownMenu>
 
       </div>
       </div>

@@ -92,7 +92,7 @@
 
 - **Tuplets & duplication**
   - Today:
-    - Duplicate (Cmd/Ctrl + D or toolbar button) is allowed only when the selection contains **no** `rhythmGroupId` notes and would not overlap any existing tuplet cells in the duplicate region.
+    - Duplicate (Cmd + D or toolbar button) is allowed only when the selection contains **no** `rhythmGroupId` notes and would not overlap any existing tuplet cells in the duplicate region.
     - If duplication would touch a tuplet (either in the selection or in the target area), it is silently disallowed.
   - Future:
     - Implement full tuplet-aware duplication:

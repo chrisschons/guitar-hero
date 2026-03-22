@@ -6,6 +6,16 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '../components/ui/context-menu';
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '../components/ui/drawer';
 import { getRiff, getMergedRiffList } from '../data/riffs';
 import { saveUserRiff, nextUserRiffId } from '../data/riffs/userRiffsStorage';
 import { useRiffHistory } from '../hooks/useRiffHistory';
@@ -53,9 +63,13 @@ import {
   ArrowLeftToLine,
   Metronome,
   SquareCenterlineDashedHorizontal,
-  LayersPlus,
+  CopyPlus,
   RotateCcw,
 } from 'lucide-react';
+import {
+  Triplet,
+  Sextuplet,
+} from '../components/icons/CustomIcons';
 import { Slider } from '../components/ui/Slider';
 import { Switch } from '../components/ui/Switch';
 import { Button } from '../components/ui/button';
@@ -92,6 +106,10 @@ function genNoteId() {
 
 function genChordId() {
   return `chord-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function genGroupId() {
+  return `rg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /** Convert GridNoteForRiff[] (from riffNotesToGridNotes) to StateTestNote[] for grid display. */
@@ -545,10 +563,12 @@ function StateTestGrid({
     return notes.filter((n) => ids.has(n.id));
   }, [notes]);
 
+  const selectionHasTuplets = notesToCopyOrCut.some((n) => n.rhythmGroupId);
+  const clipboardHasTuplets = clipboard?.items.some((i) => i.indexInGroup !== undefined) ?? false;
+
   const handleCopy = useCallback(() => {
     const toCopy = notesToCopyOrCut;
     if (toCopy.length === 0) return;
-    // Do not allow copy when selection includes tuplets/rhythm groups.
     if (toCopy.some((n) => n.rhythmGroupId)) return;
     const originRow = Math.min(...toCopy.map((n) => n.row));
     const originCol = Math.min(...toCopy.map((n) => n.startCol));
@@ -579,7 +599,6 @@ function StateTestGrid({
   const handleCut = useCallback(() => {
     const toCut = notesToCopyOrCut;
     if (toCut.length === 0) return;
-    // Do not allow cut when selection includes tuplets/rhythm groups.
     if (toCut.some((n) => n.rhythmGroupId)) return;
     const originRow = Math.min(...toCut.map((n) => n.row));
     const originCol = Math.min(...toCut.map((n) => n.startCol));
@@ -611,6 +630,7 @@ function StateTestGrid({
 
   const handlePaste = useCallback(() => {
     if (!clipboard || clipboard.items.length === 0) return;
+    if (clipboard?.items.some((i) => i.indexInGroup !== undefined)) return;
     const rg = clipboard.rhythmGroup;
     const bounds = getPastePositionBounds(
       clipboard.items,
@@ -676,34 +696,47 @@ function StateTestGrid({
               };
             });
       // If any of the new notes would overlap a tuplet/rhythm-group note, disallow the drop entirely.
-      if (newNotes.length > 0) {
+      if (newNotes.length > 0 && rg != null) {
+        // For tuplet clipboard: block if destination has existing tuplets (tuplet-on-tuplet)
         const protectedByRow = new Map<number, [number, number][]>();
         for (const n of prev) {
           if (!n.rhythmGroupId) continue;
-          const row = n.row;
-          if (!protectedByRow.has(row)) protectedByRow.set(row, []);
-          protectedByRow.get(row)!.push([n.startCol, n.endCol]);
+          if (!protectedByRow.has(n.row)) protectedByRow.set(n.row, []);
+          protectedByRow.get(n.row)!.push([n.startCol, n.endCol]);
         }
         for (const row of protectedByRow.keys()) {
           protectedByRow.set(row, mergeColumnRanges(protectedByRow.get(row)!));
         }
-        let hasTupletOverlap = false;
-        outer: for (const note of newNotes) {
-          const protectedIntervals = protectedByRow.get(note.row) ?? [];
-          for (const [ps, pe] of protectedIntervals) {
-            if (note.endCol >= ps && note.startCol <= pe) {
-              hasTupletOverlap = true;
-              break outer;
-            }
+        for (const note of newNotes) {
+          for (const [ps, pe] of (protectedByRow.get(note.row) ?? [])) {
+            if (note.endCol >= ps && note.startCol <= pe) return prev;
           }
         }
-        if (hasTupletOverlap) {
-          // Cancel paste/drag if it would land on any tuplet cells.
-          return prev;
-        }
       }
+      // For regular (non-tuplet) pastes: trim new notes around existing tuplet zones so they split
+      const effectiveNewNotes: typeof newNotes = rg != null
+        ? newNotes
+        : (() => {
+            const existingTupletRanges = new Map<number, [number, number][]>();
+            for (const n of prev) {
+              if (!n.rhythmGroupId) continue;
+              if (!existingTupletRanges.has(n.row)) existingTupletRanges.set(n.row, []);
+              existingTupletRanges.get(n.row)!.push([n.startCol, n.endCol]);
+            }
+            const trimmed: typeof newNotes = [];
+            for (const note of newNotes) {
+              const zones = existingTupletRanges.get(note.row) ?? [];
+              let intervals: [number, number][] = [[note.startCol, note.endCol]];
+              for (const zone of zones) intervals = subtractRangeFromIntervals(intervals, zone);
+              for (const [a, b] of intervals) {
+                trimmed.push({ ...note, id: genNoteId(), startCol: a, endCol: b });
+              }
+            }
+            return trimmed;
+          })();
+
       const dropFootprint = new Map<number, [number, number][]>();
-      for (const n of newNotes) {
+      for (const n of effectiveNewNotes) {
         const start = Math.max(0, n.startCol);
         const end = Math.min(totalColumns - 1, n.endCol);
         if (!dropFootprint.has(n.row)) dropFootprint.set(n.row, []);
@@ -769,7 +802,7 @@ function StateTestGrid({
       const existingCleaned = existing.map((n) =>
         n.chordId && brokenChordIds.has(n.chordId) ? { ...n, chordId: null } : n
       );
-      return [...existingCleaned.map((n) => ({ ...n, selected: false })), ...newNotes];
+      return [...existingCleaned.map((n) => ({ ...n, selected: false })), ...effectiveNewNotes];
     });
     if (clipboard.rhythmGroup != null && newGroupId != null && onPasteRhythmGroup) {
       const strings = [
@@ -788,115 +821,127 @@ function StateTestGrid({
   }, [clipboard, notes, selectedCell, applyMutation, TEST_ROWS, totalColumns, onPasteRhythmGroup]);
   handlePasteRef.current = handlePaste;
 
-  // Duplicate selection to the immediate right (Cmd/Ctrl + D).
+  // Duplicate selection to the immediate right (Cmd + D).
   const handleDuplicate = useCallback(() => {
     const toCopy = notesToCopyOrCut;
     if (toCopy.length === 0) return;
-    // Skip duplicate for now when selection includes tuplets/rhythm groups (future enhancement).
     if (toCopy.some((n) => n.rhythmGroupId)) return;
-    const originRow = Math.min(...toCopy.map((n) => n.row));
-    const originCol = Math.min(...toCopy.map((n) => n.startCol));
-    applyMutation((prev) => {
-      const selected = prev.filter((n) => n.selected);
-      if (selected.length === 0) return prev;
-      // Compute duplicate offset: place directly to the right of current selection span.
-      const selMinCol = Math.min(...selected.map((n) => n.startCol));
-      const selMaxCol = Math.max(...selected.map((n) => n.endCol));
-      const dupOffset = selMaxCol - originCol + 1;
 
-      // Compute duplicate footprint to check for overlaps with existing tuplets/rhythm groups.
-      const tentativeFootprint = new Map<number, [number, number][]>();
-      for (const n of toCopy) {
-        const row = n.row;
-        const startCol = n.startCol + dupOffset;
-        const endCol = n.endCol + dupOffset;
-        if (startCol >= totalColumns) continue;
-        const clampedEnd = Math.min(totalColumns - 1, endCol);
-        if (clampedEnd < startCol) continue;
-        if (!tentativeFootprint.has(row)) tentativeFootprint.set(row, []);
-        tentativeFootprint.get(row)!.push([startCol, clampedEnd]);
-      }
-      for (const row of tentativeFootprint.keys()) {
-        tentativeFootprint.set(row, mergeColumnRanges(tentativeFootprint.get(row)!));
-      }
-      // If the duplicate region would overlap any existing tuplet/rhythm-group cells, disallow duplication
-      // for now so we don't have to carve or resize tuplets (future enhancement).
-      for (const [row, ranges] of tentativeFootprint.entries()) {
-        for (const n of prev) {
-          if (!n.rhythmGroupId || n.row !== row) continue;
-          for (const [a, b] of ranges) {
-            if (n.endCol >= a && n.startCol <= b) {
-              return prev;
+    const originCol = Math.min(...toCopy.map((n) => n.startCol));
+    const selMaxEnd = Math.max(...toCopy.map((n) => n.endCol));
+    const dupOffset = selMaxEnd - originCol + 1;
+
+    // Map old rhythmGroupId → new rhythmGroupId for tuplet duplication
+    const groupIdMap = new Map<string, string>();
+    const selectedGroupIds = new Set(
+      toCopy.map((n) => n.rhythmGroupId).filter(Boolean) as string[]
+    );
+    for (const gid of selectedGroupIds) {
+      groupIdMap.set(gid, genGroupId());
+    }
+
+    applyMutation((prev) => {
+      if (!prev.some((n) => n.selected)) return prev;
+
+      // Block tuplet-on-existing-tuplet only
+      if (selectedGroupIds.size > 0) {
+        for (const n of toCopy) {
+          const startCol = n.startCol + dupOffset;
+          const endCol = Math.min(totalColumns - 1, n.endCol + dupOffset);
+          if (startCol >= totalColumns) continue;
+          for (const existing of prev) {
+            if (!existing.rhythmGroupId || existing.row !== n.row) continue;
+            if (endCol >= existing.startCol && startCol <= existing.endCol) {
+              return prev; // tuplet-on-tuplet: cancel
             }
           }
         }
       }
 
-      // Build duplicate notes, clamped to grid width and skipping any that would go out of range.
-      const dupNotes: StateTestNote[] = toCopy
+      // Build duplicates with remapped group IDs
+      const allDup: StateTestNote[] = toCopy
         .map((n) => {
-          const row = n.row;
           const startCol = n.startCol + dupOffset;
           const endCol = n.endCol + dupOffset;
           if (startCol >= totalColumns) return null;
           const clampedEnd = Math.min(totalColumns - 1, endCol);
           if (clampedEnd < startCol) return null;
+          const newGroupId = n.rhythmGroupId ? groupIdMap.get(n.rhythmGroupId) : undefined;
           return {
             ...n,
             id: genNoteId(),
-            row,
             startCol,
             endCol: clampedEnd,
-            // Treat duplicated notes as independent notes, not a single chord group.
             selected: true,
             chordId: null,
-          };
+            rhythmGroupId: newGroupId,
+          } as StateTestNote;
         })
         .filter((n): n is StateTestNote => n !== null);
 
+      if (allDup.length === 0) return prev;
+
+      // Trim non-tuplet duplicates around existing tuplets
+      const existingTupletRanges = new Map<number, [number, number][]>();
+      for (const n of prev) {
+        if (!n.rhythmGroupId) continue;
+        if (!existingTupletRanges.has(n.row)) existingTupletRanges.set(n.row, []);
+        existingTupletRanges.get(n.row)!.push([n.startCol, n.endCol]);
+      }
+      const dupNotes: StateTestNote[] = [];
+      for (const dn of allDup) {
+        if (dn.rhythmGroupId) { dupNotes.push(dn); continue; }
+        const zones = existingTupletRanges.get(dn.row) ?? [];
+        let intervals: [number, number][] = [[dn.startCol, dn.endCol]];
+        for (const zone of zones) intervals = subtractRangeFromIntervals(intervals, zone);
+        for (const [a, b] of intervals) dupNotes.push({ ...dn, id: genNoteId(), startCol: a, endCol: b });
+      }
+
       if (dupNotes.length === 0) return prev;
 
-      // Drop any existing notes that overlap the duplicate region, then append duplicates.
+      // Carve existing regular notes in the drop zone
       const dropFootprint = new Map<number, [number, number][]>();
       for (const n of dupNotes) {
-        const start = Math.max(0, n.startCol);
-        const end = Math.min(totalColumns - 1, n.endCol);
         if (!dropFootprint.has(n.row)) dropFootprint.set(n.row, []);
-        dropFootprint.get(n.row)!.push([start, end]);
+        dropFootprint.get(n.row)!.push([Math.max(0, n.startCol), Math.min(totalColumns - 1, n.endCol)]);
       }
       for (const row of dropFootprint.keys()) {
         dropFootprint.set(row, mergeColumnRanges(dropFootprint.get(row)!));
       }
-
       const existingCleaned = prev.flatMap((n) => {
         if (!dropFootprint.has(n.row)) return [n];
+        if (n.rhythmGroupId) return [n]; // preserve existing tuplets
         const dropRanges = dropFootprint.get(n.row)!;
         let intervals: [number, number][] = [[n.startCol, n.endCol]];
-        for (const hole of dropRanges) {
-          intervals = subtractRangeFromIntervals(intervals, hole);
-        }
+        for (const hole of dropRanges) intervals = subtractRangeFromIntervals(intervals, hole);
         if (intervals.length === 0) return [];
-        if (
-          intervals.length === 1 &&
-          intervals[0][0] === n.startCol &&
-          intervals[0][1] === n.endCol
-        )
-          return [n];
-        return intervals.map(([a, b]) => ({
-          ...n,
-          id: genNoteId(),
-          startCol: a,
-          endCol: b,
-          chordId: null,
-        }));
+        if (intervals.length === 1 && intervals[0][0] === n.startCol && intervals[0][1] === n.endCol) return [n];
+        return intervals.map(([a, b]) => ({ ...n, id: genNoteId(), startCol: a, endCol: b, chordId: null }));
       });
 
-      return [
-        ...existingCleaned.map((n) => ({ ...n, selected: false })),
-        ...dupNotes,
-      ];
+      return [...existingCleaned.map((n) => ({ ...n, selected: false })), ...dupNotes];
     });
-  }, [notesToCopyOrCut, applyMutation, totalColumns]);
+
+    // Register new rhythm groups with parent after mutation
+    if (selectedGroupIds.size > 0 && onPasteRhythmGroup) {
+      for (const [oldId, newId] of groupIdMap) {
+        const origGroup = rhythmGroups.find((g) => g.id === oldId);
+        if (origGroup) {
+          const groupNotes = toCopy.filter((n) => n.rhythmGroupId === oldId);
+          if (groupNotes.length > 0) {
+            const startSlot = Math.min(...groupNotes.map((n) => n.startCol)) + dupOffset;
+            const endSlot = Math.max(...groupNotes.map((n) => n.endCol)) + dupOffset;
+            onPasteRhythmGroup({
+              ...origGroup,
+              id: newId,
+              startSlot: Math.min(startSlot, totalColumns - 1),
+              endSlot: Math.min(endSlot, totalColumns - 1),
+            });
+          }
+        }
+      }
+    }
+  }, [notesToCopyOrCut, applyMutation, totalColumns, rhythmGroups, onPasteRhythmGroup]);
   handleDuplicateRef.current = handleDuplicate;
 
   const handleSplitIntoNotes = useCallback(() => {
@@ -2530,7 +2575,89 @@ function StateTestGrid({
           </div>
         </div>
       </div>
-      <div className="shrink-0 flex flex-wrap items-center gap-1 mt-2 p-4 mx-auto">
+      <div className="flex justify-between mt-2 p-4">
+      <Drawer>
+      <DrawerTrigger asChild>
+        <Button variant="outline" size="lg" className="rounded-full text-[12px]">Help</Button>
+      </DrawerTrigger>
+      <DrawerContent>
+        <div className="mx-auto w-full max-w-sm">
+          <DrawerHeader>
+            <DrawerTitle>Instructions</DrawerTitle>
+            <DrawerDescription>The instructions for the editor.</DrawerDescription>
+          </DrawerHeader>
+         </div>
+
+         <div className="text-[12px] text-muted-foreground w-full px-6 pb-10 mx-auto">
+
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="space-y-2">
+            <div className="font-semibold text-foreground/80 uppercase tracking-wide text-[11px]">
+              Instructions
+            </div>
+            <ul className="space-y-1">
+              <li>Click a cell to place a note (digits set note value)</li>
+              <li>Drag to move the current selection</li>
+              <li>Shift+Click to select multiple notes</li>
+              <li>Drag a note edge to resize its duration</li>
+              <li>Drag to marquee-select notes</li>
+              <li>Esc clears selection</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <div className="font-semibold text-foreground/80 uppercase tracking-wide text-[11px]">
+              Keyboard shortcuts
+            </div>
+            <ul className="space-y-2 ">
+              <li>
+                <Kbd>⌘</Kbd>
+                <span>+</span>
+                <Kbd>Z</Kbd> Undo
+              </li>
+              <li>
+                <Kbd>⌘</Kbd>
+                <span>+</span>
+                <Kbd>Shift</Kbd>
+                <span>+</span>
+                <Kbd>Z</Kbd> Redo (or <Kbd>⌘</Kbd><span>+</span><Kbd>Y</Kbd>)
+              </li>
+              <li>
+                <Kbd>⌘</Kbd><span>+</span><Kbd>C</Kbd> Copy
+              </li>
+              <li>
+               <Kbd>⌘</Kbd><span>+</span><Kbd>V</Kbd> Paste
+              </li>
+              <li>
+                <Kbd>⌘</Kbd><span>+</span><Kbd>X</Kbd> Cut
+              </li>
+             
+            </ul>
+            <p className="text-[10px] text-muted-foreground/80">
+              Tuplets can be cut, copied, pasted, and duplicated. <Kbd>T</Kbd> on a tuplet toggles triplet ↔ sextuplet.
+            </p>
+          </div>
+          <div className="space-y-2">
+          <div className="font-semibold text-foreground/80 uppercase tracking-wide text-[11px]">
+              Even more Keyboard shortcuts
+            </div>
+<ul className="space-y-2">
+<li>
+                <Kbd>⌘</Kbd><span>+</span><Kbd>D</Kbd> Duplicate
+              </li>
+              <li>
+                <Kbd>+</Kbd>/<Kbd>-</Kbd> Change duration
+              </li>
+              <li><Kbd>C</Kbd> Combine into chord</li>
+              <li><Kbd>S</Kbd> Split into notes</li>
+              <li><Kbd>Del</Kbd>/<Kbd>Backspace</Kbd> Delete</li>
+</ul>
+          </div>
+        </div>
+          </div>
+        </DrawerContent>
+          </Drawer>
+      <div className="shrink-0 flex flex-wrap items-center gap-1">
         <Button
           type="button"
           onClick={handleUndo}
@@ -2558,59 +2685,52 @@ function StateTestGrid({
         <Button
           type="button"
           variant="secondary"
-          onClick={handleCopy}
-          disabled={
-            // Require some selection and disallow any rhythm-group notes (tuplets/duration groups).
-            !notes.some((n) => n.selected) ||
-            notes.some((n) => n.selected && n.rhythmGroupId)
-          }
-          title="Copy"
-          aria-label="Copy"
-          size="lg"
-        >
-          <Copy className="w-4 h-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
           onClick={handleCut}
-          disabled={
-            // Require some selection and disallow any rhythm-group notes (tuplets/duration groups).
-            !notes.some((n) => n.selected) ||
-            notes.some((n) => n.selected && n.rhythmGroupId)
-          }
+          disabled={!notes.some((n) => n.selected) || selectionHasTuplets}
           title="Cut"
           aria-label="Cut"
           size="lg"
         >
           <Scissors className="w-4 h-4" />
+          <span className="text-[12px]">Cut</span>
         </Button>
         <Button
           type="button"
           variant="secondary"
+          onClick={handleCopy}
+          disabled={!notes.some((n) => n.selected) || selectionHasTuplets}
+          title="Copy"
+          aria-label="Copy"
+          size="lg"
+        >
+          <Copy className="w-4 h-4" />
+          <span className="text-[12px]">Copy</span>
+        </Button>
+       
+        <Button
+          type="button"
+          variant="secondary"
           onClick={handlePaste}
-          disabled={!clipboard?.items?.length}
+          disabled={!clipboard?.items?.length || clipboardHasTuplets}
           title="Paste"
           aria-label="Paste"
           size="lg"
         >
           <ClipboardPaste className="w-4 h-4" />
+          <span className="text-[12px]">Paste</span>
         </Button>
         </ButtonGroup>
         <Button
           type="button"
           variant="secondary"
           onClick={handleDuplicate}
-          disabled={
-            // Require some selection and disallow any rhythm-group notes (tuplets/duration groups).
-            !notes.some((n) => n.selected) ||
-            notes.some((n) => n.selected && n.rhythmGroupId)
-          }
-          title="Duplicate selection to the right (Cmd/Ctrl + D)"
+          disabled={!notes.some((n) => n.selected) || selectionHasTuplets}
+          title="Duplicate selection to the right (Cmd + D)"
           aria-label="Duplicate selection"
           size="lg"
         >
-          <LayersPlus className="w-4 h-4" />
+          <CopyPlus className="w-4 h-4" />
+          <span className="text-[12px]">Duplicate</span>
         </Button>
         <Button
           type="button"
@@ -2626,6 +2746,7 @@ function StateTestGrid({
           size="lg"
         >
           <ListChevronsDownUp className="w-4 h-4" />
+          <span className="text-[12px]">Combine</span>
         </Button>
         <Button
           type="button" 
@@ -2641,6 +2762,7 @@ function StateTestGrid({
           size="lg"
         >
           <SquareCenterlineDashedHorizontal className="w-4 h-4" />
+          <span className="text-[12px]">Split</span>
         </Button>
         <Button
           type="button" 
@@ -2651,23 +2773,8 @@ function StateTestGrid({
           aria-label="Make triplet"
           size="lg"
         >
-          <svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
->
-  <path d="M14.38 16.24V5.669" />
-  <path d="M7.25 17.79V7.5L21.5 3.84v10.29" />
-  <circle cx="12" cy="16.24" r="2.38" />
-  <circle cx="19.12" cy="14.13" r="2.38" />
-  <circle cx="4.88" cy="17.79" r="2.38" />
-</svg> Triplet
+          <Triplet className="w-4 h-4" /> 
+          <span className="text-[12px]">Triplet</span>
             </Button>
         <Button
           type="button" 
@@ -2678,28 +2785,15 @@ function StateTestGrid({
           aria-label="Make sextuplet"
           size="lg"
         >
-          <svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
-> 
-  <path d="M14.42 16.32V5.545" />
-  <path d="m7.16 10.95 14.52-3.73" />
-  <path d="M7.16 17.9V7.41l14.52-3.73v10.49" />
-  <circle cx="12" cy="16.32" r="2.42" />
-  <circle cx="19.26" cy="14.17" r="2.42" />
-  <circle cx="4.74" cy="17.9" r="2.42" />
-</svg> Sextuplet
+        <Sextuplet className="w-4 h-4" /> 
+        <span className="text-[12px]">Sextuplet</span>
         </Button>
-        <Button
+        
+      
+      </div>
+      <Button
           type="button"   
-          variant="secondary"
+          variant="destructive"
           onClick={handleClearAll}
           disabled={notes.length === 0}
           title="Clear all"
@@ -2707,55 +2801,11 @@ function StateTestGrid({
           size="lg"
           >
           <Trash2 className="w-4 h-4" />
+          <span className="text-[12px]">Clear All</span>
         </Button>
-      
       </div>
-      <div className="text-sm text-muted-foreground max-w-3xl mx-auto"> 
-        <div className="grid grid-cols-4 gap-2">
-          <div className="col-span-2">
-            <ul>
-              <li>- click any cell an enter a note</li>
-              <li>- drag and drop to move</li>
-              <li>- shift click to select multiple notes</li>
-              <li>- drag a note to resize notes</li>
-              <li>- drag to select notes</li>
-            </ul>
-          </div>
-          <div> 
-          <p className="text-sm">
-            <Kbd>⌘ + Z</Kbd>
-          to undo
-        </p>
-        <p className="text-sm">
-        <KbdGroup>
-        <Kbd>⌘</Kbd>
-        <span>+</span>
-        <Kbd>C</Kbd> to copy
-      </KbdGroup>
-        </p>
-            <ul>
-              <li>cmd Z - to undo</li>
-              <li>cmd shift Z - to redo</li>
-              <li>cmd c - to copy</li>
-              <li>cmd v - to paste</li>
-              <li>cmd x - to cut</li>
-            </ul>
-          </div>
-          <div>
-          <p className="text-sm">
-           <KbdGroup>
-        <Kbd>+</Kbd>
-        <Kbd>-</Kbd> change duration
-        </KbdGroup>
-        </p>
-        C - to combine into chord
-        S - to split into notes
-      Delete - to delete
-            </div>
-        
-      
-      </div>
-        </div>
+       
+    
 
       </div>
       </div>
@@ -3449,7 +3499,36 @@ export function Editor() {
 
       if (e.key === 't') {
         e.preventDefault();
-        handleMakeTriplet();
+        // If a selected cell belongs to an existing tuplet group, toggle its ratio
+        let existingGroupId: string | null = null;
+        for (const key of selection) {
+          const [sStr, slotStr] = key.split('-');
+          const s = Number(sStr);
+          const slot = Number(slotStr);
+          if (!Number.isFinite(s) || !Number.isFinite(slot)) continue;
+          const cell = editorGrid[s]?.[slot];
+          if (!cell?.noteId) continue;
+          const note = riff.notes?.find((n) => n.id === cell.noteId);
+          if (note?.rhythmGroupId) { existingGroupId = note.rhythmGroupId; break; }
+        }
+        if (existingGroupId) {
+          // Toggle triplet ↔ sextuplet
+          pushHistory(riff);
+          const toggledId = existingGroupId;
+          setRiffState((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              rhythmGroups: (prev.rhythmGroups ?? []).map((g) => {
+                if (g.id !== toggledId || !g.tupletRatio) return g;
+                const { n, d } = g.tupletRatio;
+                return { ...g, tupletRatio: n === 3 ? { n: 6, d } : { n: 3, d } };
+              }),
+            };
+          });
+        } else {
+          handleMakeTriplet();
+        }
         return;
       }
 
@@ -3613,7 +3692,7 @@ export function Editor() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [riff, selection, handleCellEdit, pushHistory, totalColumns, editorGrid, handleMakeTriplet]);
+  }, [riff, selection, handleCellEdit, pushHistory, setRiffState, totalColumns, editorGrid, handleMakeTriplet]);
 
   if (!riff) {
     return (

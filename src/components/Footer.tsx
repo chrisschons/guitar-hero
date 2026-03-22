@@ -1,5 +1,6 @@
 import { Play, Pause, ArrowLeftToLine, Metronome, SlidersHorizontal, Music4, HandMetal, Moon, Sun, Palette } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { ChordBoxIcon } from './icons/CustomIcons';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
 
@@ -146,25 +147,7 @@ export function Footer({
             Scales
           </a>
           <a href="#/chords" className="text-accent hover:text-accent-light transition-colors flex flex-col items-center gap-1">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M14.78 3.71v16.68" />
-              <path d="M20.34 5.19v-.33a1.85 1.85 0 0 0-1.85-1.85H5.51a1.85 1.85 0 0 0-1.85 1.85v.33z" />
-              <path d="M3.66 12.05h16.68" />
-              <path d="M9.22 3.71v16.68" />
-              <circle cx="14.78" cy="20.2" r="2.68" />
-              <circle cx="9.22" cy="12.05" r="2.68" />
-              <rect x="3.66" y="3.71" width="16.68" height="16.68" rx="2" />
-            </svg>
+            <ChordBoxIcon />
             Chords
           </a>
          
@@ -175,6 +158,7 @@ export function Footer({
             <SlidersHorizontal />
             Editor
           </a>
+       
             {/*}
           <a
             href="#/design-guide"

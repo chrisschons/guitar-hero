@@ -48,6 +48,13 @@ function Router() {
     return <Editor />;
   }
 
+  // TODO: re-enable when tuplet drag is resolved.
+  /*
+  if (route === '#/editor-v2') {
+    return <EditorV2 />;
+  }
+    */
+
   if (route === '#/design-guide') {
     return <DesignGuide />;
   }

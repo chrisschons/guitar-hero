@@ -94,7 +94,7 @@ export function TabDisplay({
       {showBeatIndicator && (
       <div
         data-editor-section="tab-display-beat-indicator"
-        className="fixed top-14 left-0 right-0 flex justify-center items-center h-6 z-20"
+        className="fixed top-16 left-0 right-0 flex justify-center items-center h-6 z-20"
       >
         <div className="flex gap-2">
           {Array.from({ length: beatsPerBarDots }, (_, beat) => beat).map((beat) => {
@@ -129,14 +129,14 @@ export function TabDisplay({
       {scrollMode ? (
         <div
           data-editor-section="tab-display-playhead-scroll"
-          className="absolute left-[120px] top-5 bottom-5 w-[3px] bg-accent rounded z-0"
+          className="absolute left-[120px] top-5 bottom-5 w-[3px] bg-accent rounded z-10"
           style={{ boxShadow: '0 0 10px rgba(233,69,96,0.4), 0 0 20px rgba(233,69,96,0.4)' }}
         />
       ) : (
         numRows > 0 && playheadRow >= 0 && (
           <div
             data-editor-section="tab-display-playhead-static"
-            className="absolute w-[3px] bg-accent rounded z-0"
+            className="absolute w-[3px] bg-accent rounded z-10"
             style={{
               left: `calc(3.5rem + ${(playheadColFractional / colsPerRow) * contentWidth}px)`,
               top: `calc(2.5rem + 0.5rem + ${playheadRow * (STATIC_ROW_HEIGHT + STATIC_ROW_GAP)}px)`,
