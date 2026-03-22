@@ -14,6 +14,8 @@ import { EXERCISE_TYPES, SUBDIVISIONS, getVisualizationData, getSlotsPerMeasure 
 import { TUNINGS, STANDARD_TUNING } from './data/tunings';
 import { getRiff, getMergedRiffList } from './data/riffs';
 import { getSubdivisionsPerBar, getSubdivisionsPerBeat } from './core/exercise';
+import { generateScalePosition, ROOT_SEMITONES } from './core/music';
+import { useOrderedPositions, getLowestFretStartIndex } from './hooks/useOrderedPositions';
 
 function App() {
   // Playback state (not persisted)
@@ -80,6 +82,23 @@ function App() {
   const currentType = EXERCISE_TYPES.find(t => t.id === typeId);
   const exercises = typeId === 'riffs' ? getMergedRiffList() : (currentType?.exercises || []);
   const patterns = currentType?.patterns || [];
+
+  const rootSemitone = ROOT_SEMITONES[rootNote] ?? 9;
+  const isPositionalScale = typeId === 'pentatonic' || typeId === 'blues';
+  const scalePositions = useMemo(
+    () => isPositionalScale
+      ? [0, 1, 2, 3, 4].map(i => generateScalePosition(rootSemitone, typeId, i, tuning))
+      : [],
+    [isPositionalScale, rootSemitone, typeId, tuning]
+  );
+  const { startIndex: positionStartIndex } = useOrderedPositions(scalePositions);
+  const orderedExercises = useMemo(() => {
+    if (!isPositionalScale || exercises.length !== 5) return exercises;
+    return [
+      ...exercises.slice(positionStartIndex),
+      ...exercises.slice(0, positionStartIndex),
+    ];
+  }, [isPositionalScale, exercises, positionStartIndex]);
   
   // Get visualization data
   const vizData = useMemo(() => {
@@ -177,10 +196,17 @@ function App() {
   const handleTypeChange = (id) => {
     handleReset();
     setTypeId(id);
-    // Reset to first exercise and pattern of new type
     const newType = EXERCISE_TYPES.find(t => t.id === id);
     if (newType) {
-      setExerciseId(newType.exercises[0]?.id || '');
+      let firstExerciseId = newType.exercises[0]?.id || '';
+      if ((id === 'pentatonic' || id === 'blues') && newType.exercises.length === 5) {
+        const positions = [0, 1, 2, 3, 4].map(i =>
+          generateScalePosition(rootSemitone, id, i, tuning)
+        );
+        const startIdx = getLowestFretStartIndex(positions);
+        firstExerciseId = newType.exercises[startIdx]?.id || firstExerciseId;
+      }
+      setExerciseId(firstExerciseId);
       setPatternId(newType.patterns[0]?.id || 'default');
     }
   };
@@ -196,9 +222,6 @@ function App() {
   };
 
   const handleTuningChange = (id) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7481/ingest/7c3e261f-81b5-47e6-baf0-d02d2bca5bcd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2abbdd'},body:JSON.stringify({sessionId:'2abbdd',location:'App.jsx:handleTuningChange',message:'Tuning change',data:{tuningId:id,tabLength:tab?.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     handleReset();
     setTuningId(id);
   };
@@ -250,14 +273,14 @@ function App() {
   return (
     <div className="min-h-screen flex flex-col bg-bg-secondary text-foreground overscroll-none">
       {/* Toolbar at top, full width, sticky */}
-      <div className="sticky top-0 z-10 w-full bg-secondary border-b border-border shrink-0">
+      <div className="fixed top-0 z-10 w-full bg-secondary border-b border-border shrink-0">
         <Controls
           rootNote={rootNote}
           onRootChange={handleRootChange}
           typeId={typeId}
           onTypeChange={handleTypeChange}
           exerciseId={exerciseId}
-          exercises={exercises}
+          exercises={orderedExercises}
           onExerciseChange={handleExerciseChange}
           patternId={patternId}
           patterns={patterns}
@@ -285,7 +308,7 @@ function App() {
         />
       </div>
 
-      <div className="flex-1 flex flex-col pb-80">
+      <div className="flex-1 flex flex-col pt-12 pb-80">
         <TabDisplay
           tab={tab}
           scrollPosition={scrollPosition}

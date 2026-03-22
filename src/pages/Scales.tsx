@@ -16,6 +16,7 @@ import { PositionDiagram } from '../components/PositionDiagram';
 import { getNoteAt, ROOT_SEMITONES, NOTE_NAMES, generateScalePosition } from '../core/music';
 import { STANDARD_TUNING } from '../data/tunings';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useOrderedPositions } from '../hooks/useOrderedPositions';
 
 const ROOT_SEMITONE_A = 9;
 
@@ -158,7 +159,7 @@ const A_MINOR_FULL_NOTES: [number, number][] = fullFretboardScaleNotes(
 
 export function Scales() {
   const [rootId, setRootId] = useLocalStorage('guitar-hero-root-note', 'A');
-  const [scaleTab, setScaleTab] = useState<'shapes' | 'major' | 'minor'>('shapes');
+  const [scaleTab, setScaleTab] = useLocalStorage<'shapes' | 'major' | 'minor'>('guitar-hero-scales-tab', 'shapes');
   const [showCanonicalMajor, setShowCanonicalMajor] = useState(false);
   const [showCanonicalMinor, setShowCanonicalMinor] = useState(false);
   const rootSemitone = ROOT_SEMITONES[rootId] ?? 0;
@@ -184,6 +185,12 @@ export function Scales() {
   const bluesPositionsByKey = [0,1,2,3,4].map(i => generateScalePosition(rootSemitone, 'blues', i, STANDARD_TUNING));
   const pentatonicNeutralPositions = [0,1,2,3,4].map(i => generateScalePosition(neutralRootSemitone, 'pentatonic', i, STANDARD_TUNING));
   const bluesNeutralPositions = [0,1,2,3,4].map(i => generateScalePosition(neutralRootSemitone, 'blues', i, STANDARD_TUNING));
+
+  // Rotate positions so the one closest to the nut comes first.
+  const { ordered: orderedPentatonicByKey, startIndex: pentaByKeyStart } = useOrderedPositions(pentatonicPositionsByKey);
+  const { ordered: orderedBluesByKey, startIndex: bluesByKeyStart } = useOrderedPositions(bluesPositionsByKey);
+  const { ordered: orderedPentatonicNeutral, startIndex: pentaNeutralStart } = useOrderedPositions(pentatonicNeutralPositions);
+  const { ordered: orderedBluesNeutral, startIndex: bluesNeutralStart } = useOrderedPositions(bluesNeutralPositions);
 
   const pentatonicFullNotesByKey = fullFretboardScaleNotes(pentatonicPitchSet(rootSemitone));
   const bluesFullNotesByKey = fullFretboardScaleNotes(bluesPitchSet(rootSemitone));
@@ -421,7 +428,7 @@ export function Scales() {
 
   return (
     <div className="min-h-screen flex flex-col text-foreground relative">
-      <header className="sticky top-0 z-20 w-full bg-secondary border-b border-border">
+      <header className="fixed top-0 z-20 w-full bg-secondary border-b border-border">
         <Tabs defaultValue="shapes" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'shapes' | 'major' | 'minor')} className="w-full p-0">
           <TabsList variant="line" className="w-full justify-start rounded-none gap-0 bg-transparent px-6">
           <TabsTrigger value="shapes" className="py-3">Scale Shapes</TabsTrigger>
@@ -431,7 +438,7 @@ export function Scales() {
         </Tabs>
       </header>
 
-      <div className="flex-1 p-6 pb-24 mx-auto w-full">
+      <div className="flex-1 pt-20 p-6 pb-24 mx-auto w-full">
         
         <Tabs defaultValue="shapes" value={scaleTab} onValueChange={(v) => setScaleTab(v as 'shapes' | 'major' | 'minor')} className="w-full">
            {/* Mapper Scale Tab */}
@@ -519,11 +526,11 @@ export function Scales() {
               <h3 className="text-sm font-semibold text-foreground mb-2">Pentatonic minor</h3>
             
               <div className="flex flex-wrap gap-4 justify-start">
-                {pentatonicNeutralPositions.map((notes, idx) => (
+                {orderedPentatonicNeutral.map((notes, idx) => (
                   <PositionDiagram
                     key={idx}
                     notes={notes}
-                    title={`Position ${idx + 1}`}
+                    title={`Position ${(pentaNeutralStart + idx) % orderedPentatonicNeutral.length + 1}`}
                     rootSemitone={neutralRootSemitone}
                     showFretNumbers={false}
                     showNoteLabels={false}
@@ -536,11 +543,11 @@ export function Scales() {
               <h3 className="text-sm font-semibold text-foreground mb-2">Blues minor</h3>
              
               <div className="flex flex-wrap gap-4 justify-start">
-                {bluesNeutralPositions.map((notes, idx) => (
+                {orderedBluesNeutral.map((notes, idx) => (
                   <PositionDiagram
                     key={idx}
                     notes={notes}
-                    title={`Position ${idx + 1}`}
+                    title={`Position ${(bluesNeutralStart + idx) % orderedBluesNeutral.length + 1}`}
                     rootSemitone={neutralRootSemitone}
                     showFretNumbers={false}
                     showNoteLabels={false}
@@ -669,11 +676,11 @@ export function Scales() {
             />
           </div>
           <div className="flex flex-wrap gap-4 justify-start">
-            {pentatonicPositionsByKey.map((notes, idx) => (
+            {orderedPentatonicByKey.map((notes, idx) => (
               <PositionDiagram
                 key={idx}
                 notes={notes}
-                title={`Position ${idx + 1}`}
+                title={`Position ${(pentaByKeyStart + idx) % orderedPentatonicByKey.length + 1}`}
                 rootSemitone={rootSemitone}
               />
             ))}
@@ -694,11 +701,11 @@ export function Scales() {
             />
           </div>
           <div className="flex flex-wrap gap-4 justify-start">
-            {bluesPositionsByKey.map((notes, idx) => (
+            {orderedBluesByKey.map((notes, idx) => (
               <PositionDiagram
                 key={idx}
                 notes={notes}
-                title={`Position ${idx + 1}`}
+                title={`Position ${(bluesByKeyStart + idx) % orderedBluesByKey.length + 1}`}
                 rootSemitone={rootSemitone}
               />
             ))}

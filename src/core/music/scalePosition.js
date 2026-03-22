@@ -141,7 +141,9 @@ export function generateScalePosition(rootSemitone, scaleType, positionIndex, tu
 
   const scalePitches = getScale(rootSemitone, intervals);
   const anchorFret = ((rootSemitone - tuning[5]) % 12 + 12) % 12;
-  const posCenter = anchorFret + PENTA_ANCHORS[positionIndex];
+  const rawCenter = anchorFret + PENTA_ANCHORS[positionIndex];
+  // Prefer the lower-octave position when the window would land above the 13th fret.
+  const posCenter = rawCenter > 13 ? rawCenter - 12 : rawCenter;
   const windowStart = Math.max(0, posCenter - 1);
   const windowEnd = Math.min(24, posCenter + 3);
 
