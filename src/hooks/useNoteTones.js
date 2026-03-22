@@ -5,7 +5,7 @@ import {
   playColumn as playColumnEngine,
   playColumnWithDuration as playColumnWithDurationEngine,
 } from '../core/audio';
-import { STANDARD_TUNING } from '../data/tunings';
+import { STANDARD_TUNING, STANDARD_TUNING_OCTAVES } from '../data/tunings';
 
 /**
  * Thin wrapper around core/audio note playback. Uses shared AudioContext.
@@ -13,7 +13,7 @@ import { STANDARD_TUNING } from '../data/tunings';
  * playColumnWithDuration(slotIndex, column, noteInfoPerString) uses riff duration: duration 1 = pluck, >1 = sustain.
  * Resumes context before playing so notes sound after user gesture (e.g. Play).
  */
-export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING) {
+export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING, openOctaves = STANDARD_TUNING_OCTAVES) {
   const activeSustainedRef = useRef(new Map());
 
   const playColumn = useCallback(
@@ -21,14 +21,14 @@ export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING) 
       if (volume === 0 || !column || !Array.isArray(column)) return;
       const ctx = getAudioContext();
       // Boost note volume slightly relative to metronome so guitar feels more present.
-      const play = () => playColumnEngine(ctx, column, tuning, volume * 0.3);
+      const play = () => playColumnEngine(ctx, column, tuning, volume * 0.3, openOctaves);
       if (ctx.state === 'suspended') {
         resumeAudioContext().then(play);
       } else {
         play();
       }
     },
-    [tuning, volume]
+    [tuning, openOctaves, volume]
   );
 
   const playColumnWithDuration = useCallback(
@@ -44,7 +44,8 @@ export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING) 
           tuning,
           volume * 0.3,
           activeSustainedRef.current,
-          slotDurationSec
+          slotDurationSec,
+          openOctaves
         );
       if (ctx.state === 'suspended') {
         resumeAudioContext().then(run);
@@ -52,7 +53,7 @@ export function useNoteTones(isPlaying, volume = 0.7, tuning = STANDARD_TUNING) 
         run();
       }
     },
-    [tuning, volume]
+    [tuning, openOctaves, volume]
   );
 
   const stopAllSustained = useCallback(() => {

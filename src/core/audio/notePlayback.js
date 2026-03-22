@@ -103,11 +103,12 @@ export function playNoteStart(ctx, stringIndex, fret, tuning, volume = 0.2, open
  * @param {(number|null)[]} column - length 6, index 0 = high e
  * @param {number[]} tuning
  * @param {number} [volume=0.2]
+ * @param {number[]} [openOctaves]
  */
-export function playColumn(ctx, column, tuning, volume = 0.2) {
+export function playColumn(ctx, column, tuning, volume = 0.2, openOctaves) {
   column.forEach((fret, stringIndex) => {
     if (fret != null) {
-      playNote(ctx, stringIndex, fret, tuning, volume);
+      playNote(ctx, stringIndex, fret, tuning, volume, openOctaves);
     }
   });
 }
@@ -123,8 +124,9 @@ export function playColumn(ctx, column, tuning, volume = 0.2) {
  * @param {number} [volume=0.2]
  * @param {Map<number, { stop: () => void, endSlot: number }>} activeNotes - mutated
  * @param {number} [slotDurationSec] - seconds per slot; when set, notes with onsetSlot are scheduled at (onsetSlot - slotIndex) * slotDurationSec
+ * @param {number[]} [openOctaves]
  */
-export function playColumnWithDuration(ctx, slotIndex, column, noteInfoPerString, tuning, volume = 0.2, activeNotes, slotDurationSec) {
+export function playColumnWithDuration(ctx, slotIndex, column, noteInfoPerString, tuning, volume = 0.2, activeNotes, slotDurationSec, openOctaves) {
   if (!column || !Array.isArray(column)) return;
 
   for (let stringIndex = 0; stringIndex < 6; stringIndex++) {
@@ -139,7 +141,7 @@ export function playColumnWithDuration(ctx, slotIndex, column, noteInfoPerString
     }
 
     if (list.length === 0) {
-      if (fret != null) playNote(ctx, stringIndex, fret, tuning, volume);
+      if (fret != null) playNote(ctx, stringIndex, fret, tuning, volume, openOctaves);
       continue;
     }
 
@@ -149,7 +151,7 @@ export function playColumnWithDuration(ctx, slotIndex, column, noteInfoPerString
           slotDurationSec != null && info.onsetSlot != null
             ? Math.max(0, (info.onsetSlot - slotIndex) * slotDurationSec)
             : 0;
-        playNote(ctx, stringIndex, info.fret, tuning, volume, undefined, delaySec);
+        playNote(ctx, stringIndex, info.fret, tuning, volume, openOctaves, delaySec);
         continue;
       }
 
@@ -159,7 +161,7 @@ export function playColumnWithDuration(ctx, slotIndex, column, noteInfoPerString
           entry.stop();
           activeNotes.delete(stringIndex);
         }
-        const handle = playNoteStart(ctx, stringIndex, info.fret, tuning, volume);
+        const handle = playNoteStart(ctx, stringIndex, info.fret, tuning, volume, openOctaves);
         activeNotes.set(stringIndex, { stop: handle.stop, endSlot });
       }
     }

@@ -11,7 +11,7 @@ import { useAnimationLoop } from './hooks/useAnimationLoop';
 import { useNoteTones } from './hooks/useNoteTones';
 import { useExercise } from './hooks/useExercise';
 import { EXERCISE_TYPES, SUBDIVISIONS, getVisualizationData, getSlotsPerMeasure } from './data/exerciseTypes';
-import { TUNINGS, STANDARD_TUNING } from './data/tunings';
+import { TUNINGS, STANDARD_TUNING, STANDARD_TUNING_OCTAVES } from './data/tunings';
 import { getRiff, getMergedRiffList } from './data/riffs';
 import { getSubdivisionsPerBar, getSubdivisionsPerBeat } from './core/exercise';
 import { generateScalePosition, ROOT_SEMITONES } from './core/music';
@@ -41,6 +41,7 @@ function App() {
   const [showFretNotes, setShowFretNotes] = useLocalStorage('guitar-hero-show-fret-notes', false);
 
   const tuning = TUNINGS[tuningId]?.semitones ?? STANDARD_TUNING;
+  const tuningOctaves = TUNINGS[tuningId]?.octaves ?? STANDARD_TUNING_OCTAVES;
 
   // For riffs, use the riff's time signature for dots and metronome; otherwise use global timeSignatureId
   const effectiveTimeSignatureId = useMemo(() => {
@@ -124,7 +125,7 @@ function App() {
     setCountIn(remaining);
   }, []);
 
-  const { playColumn } = useNoteTones(isPlaying, 1, tuning);
+  const { playColumn } = useNoteTones(isPlaying, 1, tuning, tuningOctaves);
 
   const handleTick = useCallback(() => {
     // First tick after count-in switches visuals into regular beat mode.
